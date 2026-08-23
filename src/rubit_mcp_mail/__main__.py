@@ -86,7 +86,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 else:
                     keys.append(key)
             print(f"provider overrides: {name} ({', '.join(sorted(keys))})")
-    session = Session(config=config, store=SecretStore())
+    store = SecretStore()
+    print(f"secrets: {store.backend_name}")
+    if store.unavailable_reason:
+        # The same binary run from a GUI-launched process may resolve a
+        # different backend, which is the classic "works in the terminal but
+        # not under the MCP client" failure.
+        print("  note: credentials in the OS keyring are not readable here.")
+    session = Session(config=config, store=store)
 
     names = [args.account] if args.account else list(config.accounts)
     if not names:

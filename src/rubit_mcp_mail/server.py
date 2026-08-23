@@ -8,13 +8,17 @@ tracebacks, because the model is the one reading them.
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from datetime import date
+from pathlib import Path
 from typing import Annotated, Any
 
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from .config import config_path
 from .mime import DEFAULT_MAX_CHARS
 from .models import AccountStatus, StaleHandleError
 from .session import Session
@@ -209,6 +213,89 @@ def get_attachment(
         return _fail(exc)
 
 
+def _configure_logging() -> None:
+    """Set up stderr logging for the server.
+
+    stdout is the MCP transport and must stay clean, so everything goes to
+    stderr - which the MCP client captures (Claude Desktop writes it to
+    ~/.config/Claude/logs/mcp-server-<name>.log). RUBIT_MCP_MAIL_LOG_LEVEL
+    raises the verbosity without needing a CLI flag, since MCP clients launch
+    the server with a fixed argv.
+    """
+    requested = os.environ.get("RUBIT_MCP_MAIL_LOG_LEVEL")
+    if requested:
+        level = getattr(logging, requested.upper(), logging.INFO)
+    else:
+        # `-v` on the CLI has already put the root logger at DEBUG; otherwise
+        # INFO, so the startup summary below is always in the client's log.
+        level = min(logging.root.level or logging.INFO, logging.INFO)
+
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+    if path := os.environ.get("RUBIT_MCP_MAIL_LOG_FILE"):
+        handlers.append(logging.FileHandler(Path(path).expanduser(), encoding="utf-8"))
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers,
+        force=True,  # replace whatever __main__ installed before dispatching here
+    )
+
+
+def _log_startup() -> None:
+    """Report where the server is reading config and credentials from.
+
+    `serve` is launched by a GUI client with a stripped environment, so it can
+    easily resolve a different config path - or a different secret backend -
+    than the CLI the user ran `auth` from. That mismatch looks exactly like an
+    expired token, so say it out loud at startup.
+    """
+    log.info("rubit-mcp-mail serve starting (pid %s)", os.getpid())
+    log.info(
+        "env: HOME=%s XDG_CONFIG_HOME=%s DBUS_SESSION_BUS_ADDRESS=%s",
+        os.environ.get("HOME"),
+        os.environ.get("XDG_CONFIG_HOME", "<unset>"),
+        os.environ.get("DBUS_SESSION_BUS_ADDRESS", "<unset>"),
+    )
+
+    path = config_path()
+    log.info("config: %s (%s)", path, "found" if path.exists() else "MISSING")
+    log.info("secrets: %s", _session.store.backend_name)
+    if reason := _session.store.unavailable_reason:
+        log.warning(
+            "OS keyring not in use: %s. Credentials stored by `rubit-mcp-mail auth` "
+            "in the keyring will NOT be visible to this process.",
+            reason,
+        )
+
+    try:
+        accounts = list(_session.config.accounts.values())
+    except Exception as exc:  # noqa: BLE001 - never let diagnostics stop the server
+        log.warning("could not load config: %s", exc)
+        return
+
+    for account in accounts:
+        try:
+            strategy = _session.auth_for(account)
+            stored = _session.store.get(strategy.secret_key) is not None
+            log.info(
+                "account %s <%s> via %s: credential %s (key %r)",
+                account.name,
+                account.email,
+                account.provider,
+                "present" if stored else "NOT FOUND",
+                strategy.secret_key,
+            )
+            # status() can refresh over the network; only pay for that when
+            # someone has actually asked for debug output.
+            if log.isEnabledFor(logging.DEBUG):
+                state, detail = strategy.status()
+                log.debug("account %s auth status: %s%s", account.name, state,
+                          f" - {detail}" if detail else "")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("account %s: could not check credentials: %s", account.name, exc)
+
+
 def main() -> None:
-    logging.basicConfig(level=logging.WARNING)
+    _configure_logging()
+    _log_startup()
     mcp.run(transport="stdio")

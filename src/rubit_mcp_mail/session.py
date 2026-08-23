@@ -19,6 +19,10 @@ class Session:
         self._backends: dict[str, ImapBackend] = {}
 
     @property
+    def store(self) -> SecretStore:
+        return self._store
+
+    @property
     def config(self) -> Config:
         if self._config is None:
             self._config = load_config()

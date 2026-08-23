@@ -9,10 +9,16 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 log = logging.getLogger(__name__)
 
 SERVICE = "rubit-mcp-mail"
+
+_NO_SESSION_HINT = (
+    "this process has no DBUS_SESSION_BUS_ADDRESS, so the desktop keyring "
+    "(Secret Service) is unreachable from here"
+)
 
 
 def _fallback_path() -> Path:
@@ -24,26 +30,67 @@ class SecretStore:
     """Get/set/delete named secrets, transparently choosing a backend.
 
     The keyring package raises if no usable backend is present (common on
-    headless boxes), so every call falls back to an owner-only file.
+    headless boxes, and on any process launched without the desktop session's
+    DBus address), so every call falls back to an owner-only file.
+
+    Which backend is in use matters for diagnosis: a secret written to the
+    keyring is invisible to a process that cannot reach the keyring, and the
+    symptom is an account that looks unauthenticated. `backend_name` and
+    `unavailable_reason` exist so that failure can explain itself.
     """
 
     def __init__(self, path: Path | None = None) -> None:
         self._path = path or _fallback_path()
+        self._resolved: tuple[Any, str] | None = None
 
     # -- keyring ---------------------------------------------------------
-    def _keyring(self):
-        if os.environ.get("RUBIT_MCP_MAIL_NO_KEYRING"):
-            return None
-        try:
-            import keyring
-            from keyring.backends import fail
+    def _resolve(self) -> tuple[Any, str]:
+        """Return (keyring module or None, reason it is unusable if None)."""
+        if self._resolved is not None:
+            return self._resolved
 
-            backend = keyring.get_keyring()
-            if isinstance(backend, fail.Keyring):
-                return None
-            return keyring
-        except Exception:  # noqa: BLE001 - any keyring problem means "use the file"
-            return None
+        if os.environ.get("RUBIT_MCP_MAIL_NO_KEYRING"):
+            self._resolved = (None, "disabled by RUBIT_MCP_MAIL_NO_KEYRING")
+        else:
+            try:
+                import keyring
+                from keyring.backends import fail
+
+                backend = keyring.get_keyring()
+                if isinstance(backend, fail.Keyring):
+                    reason = "no usable keyring backend"
+                    if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+                        reason = f"{reason}: {_NO_SESSION_HINT}"
+                    self._resolved = (None, reason)
+                else:
+                    self._resolved = (keyring, type(backend).__module__)
+            except Exception as exc:  # noqa: BLE001 - any problem means "use the file"
+                self._resolved = (None, f"keyring unusable ({type(exc).__name__}: {exc})")
+
+        module, reason = self._resolved
+        log.debug(
+            "secret backend: %s", reason if module is None else f"keyring ({reason})"
+        )
+        return self._resolved
+
+    def _keyring(self):
+        return self._resolve()[0]
+
+    # -- introspection ---------------------------------------------------
+    @property
+    def backend_name(self) -> str:
+        """Human-readable description of where secrets are read and written."""
+        module, reason = self._resolve()
+        if module is not None:
+            return f"keyring ({reason})"
+        exists = "exists" if self._path.exists() else "does not exist yet"
+        return f"file {self._path} ({exists}) - keyring unavailable: {reason}"
+
+    @property
+    def unavailable_reason(self) -> str | None:
+        """Why the keyring is not being used, or None when it is."""
+        module, reason = self._resolve()
+        return None if module is not None else reason
 
     # -- file ------------------------------------------------------------
     def _read_file(self) -> dict[str, str]:
@@ -70,10 +117,16 @@ class SecretStore:
             try:
                 value = kr.get_password(SERVICE, key)
                 if value is not None:
+                    log.debug("secret %s: found in keyring", key)
                     return value
+                log.debug("secret %s: not in keyring; trying %s", key, self._path)
             except Exception:  # noqa: BLE001
                 log.debug("keyring read failed for %s; falling back to file", key)
-        return self._read_file().get(key)
+        value = self._read_file().get(key)
+        log.debug(
+            "secret %s: %s in %s", key, "found" if value else "NOT found", self._path
+        )
+        return value
 
     def set(self, key: str, value: str) -> str:
         """Store the secret. Returns the backend used, for `doctor` output."""

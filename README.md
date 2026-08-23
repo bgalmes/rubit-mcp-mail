@@ -191,6 +191,74 @@ file that doesn't exist:
 claude mcp add rubit-mail --scope user -- /absolute/path/to/rubit-mcp-mail/.venv/bin/rubit-mcp-mail serve
 ```
 
+## Register with Claude Desktop
+
+Claude Desktop launches MCP servers from the desktop process with a **stripped
+environment** — no `DBUS_SESSION_BUS_ADDRESS`, no `XDG_RUNTIME_DIR`. Without
+those, `keyring` cannot reach the desktop Secret Service, so the OAuth token
+that `rubit-mcp-mail auth` stored in your keyring is invisible to the server and
+every account reports "not authenticated" — even though `doctor` in a terminal
+says `auth ok`. Pass the session variables explicitly in
+`~/.config/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "rubit-mail": {
+      "command": "/absolute/path/to/rubit-mcp-mail/.venv/bin/rubit-mcp-mail",
+      "args": ["serve"],
+      "env": {
+        "HOME": "/home/you",
+        "USER": "you",
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "XDG_RUNTIME_DIR": "/run/user/1000",
+        "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus"
+      }
+    }
+  }
+}
+```
+
+Use your own uid (`id -u`) in the two `/run/user/...` paths. `HOME`, `USER` and
+`PATH` are repeated because some clients replace the default environment rather
+than merging with it.
+
+The alternative, if you would rather not depend on the keyring at all, is to set
+`RUBIT_MCP_MAIL_NO_KEYRING=1` — in the `env` block **and** in the shell you run
+`rubit-mcp-mail auth` from, so both sides use
+`~/.config/rubit-mcp-mail/secrets.json` (mode 0600). That puts the refresh token
+on disk in plain text; the keyring is the better default.
+
+### Troubleshooting
+
+`serve` logs a startup summary to stderr, which Claude Desktop captures in
+`~/.config/Claude/logs/mcp-server-<name>.log` and Claude Code shows with
+`claude --mcp-debug`. It names the config path, the secret backend in use, and
+whether each account's credential was found:
+
+```
+config: /home/you/.config/rubit-mcp-mail/config.toml (found)
+secrets: keyring (keyring.backends.SecretService)
+account outlook <you@outlook.com> via outlook: credential present (key 'msal-cache:outlook')
+```
+
+For more, set `RUBIT_MCP_MAIL_LOG_LEVEL=DEBUG` (and optionally
+`RUBIT_MCP_MAIL_LOG_FILE=/tmp/rubit-mail.log`) in the `env` block; at DEBUG the
+server also reports each account's live auth status, including why a silent
+token refresh failed.
+
+To watch it by hand, run the server in the foreground with the same environment
+the client uses:
+
+```bash
+env -i HOME="$HOME" USER="$USER" PATH=/usr/local/bin:/usr/bin:/bin \
+  RUBIT_MCP_MAIL_LOG_LEVEL=DEBUG ./.venv/bin/rubit-mcp-mail serve
+```
+
+If that prints `credential NOT FOUND` while `rubit-mcp-mail doctor` in your
+terminal prints `auth ok`, the mismatch is the environment, not the token —
+compare the `secrets:` line from each.
+
 ## Adding a provider
 
 `src/rubit_mcp_mail/providers.py` is a dict of profiles — host, port, and which auth

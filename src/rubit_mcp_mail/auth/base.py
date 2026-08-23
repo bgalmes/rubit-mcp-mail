@@ -24,6 +24,11 @@ class NeedsAuthError(Exception):
 class AuthStrategy(Protocol):
     """Knows how to authenticate an already-connected IMAPClient."""
 
+    #: SecretStore key this strategy persists its credential under. Public so
+    #: diagnostics can check whether a credential is present without a network
+    #: round-trip.
+    secret_key: str
+
     def __init__(self, account: Account, store: SecretStore) -> None: ...
 
     def login(self, client: IMAPClient) -> None:

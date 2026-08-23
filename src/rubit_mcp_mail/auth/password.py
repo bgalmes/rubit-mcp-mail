@@ -20,14 +20,14 @@ class PasswordAuth:
     def __init__(self, account: Account, store: SecretStore) -> None:
         self._account = account
         self._store = store
-        self._key = f"password:{account.name}"
+        self.secret_key = f"password:{account.name}"
 
     def _password(self) -> str | None:
         # An env var lets you avoid persisting the secret at all.
         import os
 
         env = os.environ.get(f"RUBIT_MCP_MAIL_PASSWORD_{self._account.name.upper()}")
-        return env or self._store.get(self._key)
+        return env or self._store.get(self.secret_key)
 
     def login(self, client: IMAPClient) -> None:
         password = self._password()
@@ -45,7 +45,7 @@ class PasswordAuth:
         password = getpass.getpass("App password: ").strip()
         if not password:
             raise ValueError("No password entered; nothing stored.")
-        where = self._store.set(self._key, password)
+        where = self._store.set(self.secret_key, password)
         return f"Password stored in {where}."
 
     def status(self) -> tuple[str, str | None]:

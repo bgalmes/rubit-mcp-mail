@@ -8,6 +8,8 @@ only ever acquires tokens silently.
 
 from __future__ import annotations
 
+import logging
+
 import msal
 from imapclient import IMAPClient
 from imapclient.exceptions import LoginError
@@ -16,12 +18,14 @@ from ..config import Account
 from ..secrets import SecretStore
 from .base import NeedsAuthError
 
+log = logging.getLogger(__name__)
+
 
 class MicrosoftDeviceCodeAuth:
     def __init__(self, account: Account, store: SecretStore) -> None:
         self._account = account
         self._store = store
-        self._key = f"msal-cache:{account.name}"
+        self.secret_key = f"msal-cache:{account.name}"
         self._oauth = account.profile.oauth
         if self._oauth is None:
             raise ValueError(
@@ -31,13 +35,13 @@ class MicrosoftDeviceCodeAuth:
     # -- MSAL plumbing ---------------------------------------------------
     def _load_cache(self) -> msal.SerializableTokenCache:
         cache = msal.SerializableTokenCache()
-        if blob := self._store.get(self._key):
+        if blob := self._store.get(self.secret_key):
             cache.deserialize(blob)
         return cache
 
     def _save_cache(self, cache: msal.SerializableTokenCache) -> None:
         if cache.has_state_changed:
-            self._store.set(self._key, cache.serialize())
+            self._store.set(self.secret_key, cache.serialize())
 
     def _app(self, cache: msal.SerializableTokenCache) -> msal.PublicClientApplication:
         return msal.PublicClientApplication(
@@ -46,26 +50,55 @@ class MicrosoftDeviceCodeAuth:
             token_cache=cache,
         )
 
-    def _token_silent(self) -> str | None:
-        cache = self._load_cache()
+    def _token_silent(self) -> tuple[str | None, str]:
+        """Acquire an access token without user interaction.
+
+        Returns (token, reason). When the token is None the reason says which
+        step failed, because "not authenticated" has several very different
+        causes - most confusingly a token that exists but sits in a keyring
+        this process cannot reach.
+        """
+        blob = self._store.get(self.secret_key)
+        if not blob:
+            reason = f"no token cache in {self._store.backend_name}"
+            if hint := self._store.unavailable_reason:
+                reason += (
+                    f". The keyring is not being used here ({hint}); if you ran "
+                    f"`rubit-mcp-mail auth {self._account.name}` from a desktop terminal "
+                    "the token is in the keyring and invisible to this process"
+                )
+            log.debug("account %s: %s", self._account.name, reason)
+            return None, reason
+
+        cache = msal.SerializableTokenCache()
+        cache.deserialize(blob)
         app = self._app(cache)
         accounts = [
             a for a in app.get_accounts()
             if a.get("username", "").lower() == self._account.email.lower()
         ]
         if not accounts:
-            return None
+            known = ", ".join(sorted(a.get("username", "?") for a in app.get_accounts()))
+            return None, (
+                f"the token cache holds no entry for {self._account.email}"
+                + (f" (it has: {known})" if known else "")
+            )
+
         result = app.acquire_token_silent(self._oauth.scopes, account=accounts[0])
         self._save_cache(cache)
         if result and "access_token" in result:
-            return result["access_token"]
-        return None
+            log.debug("account %s: acquired token silently", self._account.name)
+            return result["access_token"], "ok"
+        detail = ""
+        if isinstance(result, dict):
+            detail = result.get("error_description") or result.get("error") or ""
+        return None, f"refresh failed{f': {detail}' if detail else ''}"
 
     # -- AuthStrategy ----------------------------------------------------
     def login(self, client: IMAPClient) -> None:
-        token = self._token_silent()
+        token, reason = self._token_silent()
         if not token:
-            raise NeedsAuthError(self._account.name, "no cached token, or refresh failed")
+            raise NeedsAuthError(self._account.name, reason)
         try:
             client.oauth2_login(self._account.email, token, mech="XOAUTH2")
         except LoginError as exc:
@@ -114,8 +147,7 @@ class MicrosoftDeviceCodeAuth:
 
     def status(self) -> tuple[str, str | None]:
         try:
-            if self._token_silent():
-                return "ok", None
+            token, reason = self._token_silent()
         except Exception as exc:  # noqa: BLE001 - report, never crash the tool listing
             return "error", str(exc)
-        return "needs_auth", "no cached token"
+        return ("ok", None) if token else ("needs_auth", reason)
