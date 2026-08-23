@@ -49,7 +49,10 @@ class MicrosoftDeviceCodeAuth:
     def _token_silent(self) -> str | None:
         cache = self._load_cache()
         app = self._app(cache)
-        accounts = app.get_accounts()
+        accounts = [
+            a for a in app.get_accounts()
+            if a.get("username", "").lower() == self._account.email.lower()
+        ]
         if not accounts:
             return None
         result = app.acquire_token_silent(self._oauth.scopes, account=accounts[0])
