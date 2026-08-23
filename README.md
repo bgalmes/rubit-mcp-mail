@@ -177,9 +177,18 @@ To avoid storing the password at all, set
 
 ## Register with Claude Code
 
+Run this from the repo root (it resolves the venv path for you):
+
 ```bash
-claude mcp add rubit-mail --scope user -- \
-  /path/to/rubit-mcp-mail/.venv/bin/rubit-mcp-mail serve
+claude mcp add rubit-mail --scope user -- "$(pwd)/.venv/bin/rubit-mcp-mail" serve
+```
+
+If you'd rather type the path by hand, use one line and no trailing
+whitespace — a stray space before the path makes `posix_spawn` look for a
+file that doesn't exist:
+
+```bash
+claude mcp add rubit-mail --scope user -- /absolute/path/to/rubit-mcp-mail/.venv/bin/rubit-mcp-mail serve
 ```
 
 ## Adding a provider
