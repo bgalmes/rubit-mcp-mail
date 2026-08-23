@@ -69,6 +69,10 @@ registration, done once.
 7. Copy the **Application (client) ID** from the Overview page.
 
 Those two bolded steps are the ones people miss; both produce confusing errors.
+If registering an app is blocked by your organization's policy, sign in to
+portal.azure.com with the personal Microsoft account itself (not a work
+account) — a personal outlook.com/hotmail account has its own directory that
+org policies don't govern.
 
 ### 2. Configure
 
@@ -105,6 +109,30 @@ silently and never prompts.
 
 This checks config, credentials, connectivity, and authentication, then lists
 your folders with their detected roles. If this works, the server will too.
+
+### Can't register your own app?
+
+If your Microsoft account genuinely can't register an Azure app (and it isn't
+just a work-tenant policy — see the note in step 1), you can use a public
+client ID that other open-source mail tools already share for exactly this
+purpose instead of registering your own: Thunderbird's,
+`9e5f94bc-e8a4-4e73-b8be-63364c29d753`. It's multi-tenant and already has the
+`IMAP.AccessAsUser.All` permission granted, so device-code sign-in works
+immediately — just paste it in as `client_id`:
+
+```toml
+[accounts.outlook]
+provider  = "outlook"
+email     = "you@outlook.com"
+client_id = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
+```
+
+Two things to know: the Microsoft consent screen will say **"Thunderbird"** is
+requesting access (cosmetic only — the token it grants works the same), and
+because this ID is outside our control, Microsoft could disable or rotate it
+in the future (it's happened to Thunderbird's client IDs before) — if sign-in
+suddenly starts failing, that's the first thing to suspect. Switch to your own
+registration above if that happens.
 
 ## Other providers
 
