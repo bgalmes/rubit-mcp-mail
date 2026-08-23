@@ -54,6 +54,55 @@ port = 1993
             load_config(tmp_path / "absent.toml")
 
 
+class TestProviderOverrides:
+    def test_overrides_host_and_oauth_fields(self, write_config):
+        config = load_config(write_config('''
+[accounts.x]
+provider = "outlook"
+email = "a@b.c"
+client_id = "abc"
+
+[providers.outlook]
+host = "outlook.example.net"
+
+[providers.outlook.oauth]
+authority = "https://login.example.net/common"
+scopes = ["https://example.net/IMAP.AccessAsUser.All"]
+'''))
+        profile = config.account("x").profile
+        assert profile.host == "outlook.example.net"
+        assert profile.oauth.authority == "https://login.example.net/common"
+        assert profile.oauth.scopes == ["https://example.net/IMAP.AccessAsUser.All"]
+
+    def test_override_does_not_leak_to_other_providers(self, write_config):
+        config = load_config(write_config('''
+[accounts.outlook]
+provider = "outlook"
+email = "a@b.c"
+client_id = "abc"
+[accounts.other]
+provider = "generic"
+email = "d@e.f"
+host = "imap.example.com"
+
+[providers.outlook]
+host = "outlook.example.net"
+'''))
+        assert config.account("outlook").profile.host == "outlook.example.net"
+        assert config.account("other").profile.host == "imap.example.com"
+
+    def test_unknown_override_key_is_caught(self, write_config):
+        with pytest.raises(ValueError, match="Unknown provider override"):
+            load_config(write_config(
+                '[providers.outlook]\nnope = "x"\n'
+                '[accounts.x]\nprovider="outlook"\nemail="a@b.c"\nclient_id="abc"'
+            ))
+
+    def test_unknown_provider_name_is_caught(self, write_config):
+        with pytest.raises(ValueError, match="Known providers: generic, outlook"):
+            load_config(write_config('[providers.gmial]\nhost = "x"'))
+
+
 class TestAccountResolution:
     def _config(self, write_config, body):
         return load_config(write_config(body))

@@ -134,6 +134,27 @@ in the future (it's happened to Thunderbird's client IDs before) — if sign-in
 suddenly starts failing, that's the first thing to suspect. Switch to your own
 registration above if that happens.
 
+## If Microsoft changes their endpoints
+
+The Outlook IMAP host, OAuth authority URL, and IMAP scope are compiled into
+`providers.py` as of when this was built. If Microsoft ever changes one of
+them, you don't need to wait for a new release — add a `[providers.outlook]`
+table to your own `config.toml` (never tracked by git) with the corrected
+value, and it takes effect immediately:
+
+```toml
+[providers.outlook]
+host = "outlook.office365.com"   # current default, shown for reference
+
+[providers.outlook.oauth]
+authority = "https://login.microsoftonline.com/common"
+scopes = ["https://outlook.office.com/IMAP.AccessAsUser.All"]
+```
+
+Only include the keys you actually need to change. `rubit-mcp-mail doctor`
+prints a line naming any overrides currently in effect. This works for any
+provider, not just Outlook — `port` and `ssl` are overridable too.
+
 ## Other providers
 
 Anything that speaks IMAP with an app password:

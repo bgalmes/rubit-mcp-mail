@@ -47,3 +47,40 @@ def get_profile(name: str) -> ImapProfile:
     except KeyError:
         known = ", ".join(sorted(PROFILES))
         raise ValueError(f"Unknown provider {name!r}. Known providers: {known}") from None
+
+
+_OVERRIDABLE = {"host", "port", "ssl"}
+_OVERRIDABLE_OAUTH = {"authority", "scopes"}
+
+
+def apply_overrides(profile: ImapProfile, overrides: dict) -> ImapProfile:
+    """Layer a raw {host, port, ssl, oauth: {authority, scopes}} dict onto a profile.
+
+    Lets the endpoint strings above be corrected locally (e.g. if Microsoft
+    changes its IMAP host or OAuth authority) without editing this file.
+    Unknown keys raise rather than being silently ignored, so a typo in the
+    user's config is caught immediately instead of quietly doing nothing.
+    Never mutates `profile` - PROFILES entries are shared, module-level
+    singletons reused by every call.
+    """
+    if not overrides:
+        return profile
+
+    overrides = dict(overrides)
+    oauth_overrides = overrides.pop("oauth", None)
+    unknown = set(overrides) - _OVERRIDABLE
+    if unknown:
+        raise ValueError(f"Unknown provider override key(s): {', '.join(sorted(unknown))}")
+
+    update = dict(overrides)
+    if oauth_overrides:
+        if profile.oauth is None:
+            raise ValueError("This provider has no OAuth configuration to override")
+        unknown_oauth = set(oauth_overrides) - _OVERRIDABLE_OAUTH
+        if unknown_oauth:
+            raise ValueError(
+                f"Unknown provider oauth override key(s): {', '.join(sorted(unknown_oauth))}"
+            )
+        update["oauth"] = profile.oauth.model_copy(update=dict(oauth_overrides))
+
+    return profile.model_copy(update=update)

@@ -10,9 +10,9 @@ import os
 import tomllib
 from pathlib import Path
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_validator
 
-from .providers import ImapProfile, get_profile
+from .providers import ImapProfile, apply_overrides, get_profile
 
 
 class Account(BaseModel):
@@ -25,6 +25,9 @@ class Account(BaseModel):
     host: str | None = None
     port: int | None = None
     ssl: bool | None = None
+    # Set by load_config() from the config's top-level [providers.*] tables;
+    # empty for accounts built directly (e.g. in tests).
+    _provider_overrides: dict = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="after")
     def _check_against_profile(self) -> "Account":
@@ -43,8 +46,8 @@ class Account(BaseModel):
 
     @property
     def profile(self) -> ImapProfile:
-        """Provider defaults with any per-account overrides applied."""
-        profile = get_profile(self.provider)
+        """Provider defaults, with [providers.*] and then per-account overrides applied."""
+        profile = apply_overrides(get_profile(self.provider), self._provider_overrides)
         return profile.model_copy(
             update={
                 "host": self.host or profile.host,
@@ -57,6 +60,10 @@ class Account(BaseModel):
 class Config(BaseModel):
     download_dir: Path = Field(default=Path.home() / "Downloads" / "rubit-mcp-mail")
     accounts: dict[str, Account] = Field(default_factory=dict)
+    # Raw [providers.<name>] tables from config.toml: local overrides for the
+    # compiled-in endpoint strings in providers.py, so a Microsoft (or other
+    # provider) change doesn't require a new release - only a local edit.
+    providers: dict[str, dict] = Field(default_factory=dict)
 
     def account(self, name: str | None) -> Account:
         """Resolve an account by name, defaulting when only one is configured."""
@@ -99,19 +106,28 @@ def load_config(path: Path | None = None) -> Config:
     with path.open("rb") as fh:
         raw = tomllib.load(fh)
 
+    providers_raw = raw.pop("providers", {}) or {}
+    for name, overrides in providers_raw.items():
+        try:
+            apply_overrides(get_profile(name), overrides)
+        except ValueError as exc:
+            raise ValueError(f"In [providers.{name}] of {path}: {exc}") from None
+
     accounts_raw = raw.pop("accounts", {}) or {}
     accounts = {}
     for name, body in accounts_raw.items():
         try:
-            accounts[name] = Account(name=name, **body)
+            account = Account(name=name, **body)
         except ValidationError as exc:
             # Surface our own validator text; pydantic's wrapper buries the
             # setup guidance under a URL the user does not need.
             raise ValueError(_first_error(exc)) from None
+        account._provider_overrides = providers_raw.get(account.provider, {})
+        accounts[name] = account
     download_dir = Path(
         str(raw.pop("download_dir", Path.home() / "Downloads" / "rubit-mcp-mail"))
     ).expanduser()
     if raw:
         unknown = ", ".join(sorted(raw))
         raise ValueError(f"Unknown key(s) in {path}: {unknown}")
-    return Config(download_dir=download_dir, accounts=accounts)
+    return Config(download_dir=download_dir, accounts=accounts, providers=providers_raw)

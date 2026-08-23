@@ -77,6 +77,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         return 1
 
     print(f"downloads: {config.download_dir}")
+    if config.providers:
+        for name, overrides in sorted(config.providers.items()):
+            keys = []
+            for key, value in overrides.items():
+                if key == "oauth" and isinstance(value, dict):
+                    keys.extend(f"oauth.{sub}" for sub in value)
+                else:
+                    keys.append(key)
+            print(f"provider overrides: {name} ({', '.join(sorted(keys))})")
     session = Session(config=config, store=SecretStore())
 
     names = [args.account] if args.account else list(config.accounts)
