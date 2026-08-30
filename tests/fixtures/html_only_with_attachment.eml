@@ -1,0 +1,28 @@
+Message-ID: <weekly-712@pythonweekly.com>
+Date: Thu, 20 Aug 2026 07:15:00 +0000
+From: Python Weekly <rahul@pythonweekly.com>
+To: me@outlook.com
+Subject: Python Weekly - Issue 712
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-boundary-7"
+
+--mixed-boundary-7
+Content-Type: multipart/alternative; boundary="alt-boundary-7"
+
+--alt-boundary-7
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PGJvZHk+PGgxPlB5dGhvbiBXZWVrbHk8L2gxPjxwPklzc3VlIDcxMiwgY3VyYXRl
+ZCBieSBSYWh1bC48L3A+PC9ib2R5PjwvaHRtbD4=
+
+--alt-boundary-7--
+
+--mixed-boundary-7
+Content-Type: application/pdf; name="sponsor.pdf"
+Content-Disposition: attachment; filename="sponsor.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKc3BvbnNvcg==
+
+--mixed-boundary-7--

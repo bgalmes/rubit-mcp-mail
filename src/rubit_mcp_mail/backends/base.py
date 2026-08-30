@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol, runtime_checkable
 
+from ..mime import DEFAULT_MAX_CHARS
+
 from ..models import Folder, Message, MessageSummary
 
 
@@ -41,7 +43,7 @@ class MailBackend(Protocol):
         offset: int = 0,
     ) -> list[MessageSummary]: ...
 
-    def read_message(self, handle: str, max_chars: int = 20_000) -> Message: ...
+    def read_message(self, handle: str, max_chars: int = DEFAULT_MAX_CHARS) -> Message: ...
 
     def fetch_attachment(self, handle: str, part_id: str) -> tuple[str, bytes]: ...
 

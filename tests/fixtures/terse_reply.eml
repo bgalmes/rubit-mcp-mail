@@ -1,0 +1,24 @@
+Message-ID: <reply-88@example.com>
+Date: Fri, 28 Aug 2026 11:04:00 +0000
+From: Alice <alice@example.com>
+To: me@outlook.com
+Subject: Re: comida el viernes
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="terse"
+
+--terse
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Mira esto: https://example.com/menu
+
+Que te parece?
+
+--terse
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+<html><body><p>Mira esto: <a href="https://example.com/menu">el menu</a></p>
+<p>Que te parece?</p></body></html>
+
+--terse--

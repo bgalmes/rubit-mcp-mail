@@ -1,0 +1,23 @@
+Message-ID: <placeholder-1@tldrnewsletter.com>
+Date: Wed, 19 Aug 2026 06:00:00 +0000
+From: TLDR <dan@tldrnewsletter.com>
+To: me@outlook.com
+Subject: A plain part that only looks like content
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="ph-1"
+
+--ph-1
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+=20=20=20
+=09
+=20
+
+--ph-1
+Content-Type: text/html; charset="iso-8859-1"
+Content-Transfer-Encoding: 7bit
+
+<html><body><p>Caf&eacute; news: the real body lives here.</p></body></html>
+
+--ph-1--

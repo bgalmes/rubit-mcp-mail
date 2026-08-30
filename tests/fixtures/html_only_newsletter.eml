@@ -1,0 +1,29 @@
+Return-Path: <dan@tldrnewsletter.com>
+Message-ID: <newsletter-2026-08-21@tldrnewsletter.com>
+Date: Fri, 21 Aug 2026 06:02:11 +0000
+From: TLDR <dan@tldrnewsletter.com>
+To: me@outlook.com
+Subject: TLDR 2026-08-21
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt-boundary-42"
+
+This is a multi-part message in MIME format.
+
+--alt-boundary-42
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+
+--alt-boundary-42
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body style=3D"margin:0">
+<h1>TLDR</h1>
+<p>Anthropic ships a new model (3 minute read)</p>
+<p>The rest of the newsletter, with a very long line that a na=C3=AFve conve=
+rter would hard-wrap in the middle of a sentence but ours must not.</p>
+<a href=3D"https://tldr.tech/unsubscribe">Unsubscribe</a>
+</body></html>
+
+--alt-boundary-42--

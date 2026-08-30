@@ -20,12 +20,14 @@ from imapclient.exceptions import IMAPClientAbortError, IMAPClientError
 from ..auth.base import AuthStrategy
 from ..config import Account
 from ..mime import (
+    DEFAULT_MAX_CHARS,
     address_list,
     attachments_from,
-    choose_body_part,
+    body_candidates,
     decode_body,
     decode_header,
     html_to_text,
+    normalize_spacing,
     to_datetime,
     truncate,
     walk_bodystructure,
@@ -343,7 +345,23 @@ class ImapBackend:
             )
         return parsed
 
-    def read_message(self, handle: str, max_chars: int = 20_000) -> Message:
+    def _body_text(self, uid: int, part, body_format: str) -> str:
+        """Fetch one candidate part and render it, or "" if it holds no text."""
+        # PEEK so that reading a message never marks it as read.
+        key = f"BODY.PEEK[{part.part_id}]".encode()
+        fetched = self._retry(self.client.fetch, [uid], [key]).get(uid, {})
+        raw = fetched.get(f"BODY[{part.part_id}]".encode()) or b""
+        if not raw:
+            log.debug("uid %s: server returned no data for part %s", uid, part.part_id)
+            return ""
+        text = decode_body(raw, part)
+        if body_format == "html-converted":
+            text = html_to_text(text)
+        # Both legs carry the sender's preview-line padding, so strip it here
+        # rather than only on the path that happens to go through html2text.
+        return normalize_spacing(text).strip()
+
+    def read_message(self, handle: str, max_chars: int = DEFAULT_MAX_CHARS) -> Message:
         parsed = self._open_handle(handle)
         uid = parsed.uid
         meta = self._retry(
@@ -357,18 +375,32 @@ class ImapBackend:
         summary = self._summary(parsed.folder, parsed.uidvalidity, uid, meta)
         env = meta.get(b"ENVELOPE")
         parts = walk_bodystructure(meta[b"BODYSTRUCTURE"]) if meta.get(b"BODYSTRUCTURE") else []
-        body_part, body_format = choose_body_part(parts)
+        candidates = body_candidates(parts)
 
-        body, truncated = "", False
-        if body_part is not None:
-            # PEEK so that reading a message never marks it as read.
-            key = f"BODY.PEEK[{body_part.part_id}]".encode()
-            fetched = self._retry(self.client.fetch, [uid], [key]).get(uid, {})
-            raw = fetched.get(f"BODY[{body_part.part_id}]".encode()) or b""
-            body = decode_body(raw, body_part)
-            if body_format == "html-converted":
-                body = html_to_text(body)
-            body, truncated = truncate(body.strip(), max_chars)
+        body = ""
+        # If every candidate turns out to be empty, still report what the message
+        # claimed to be rather than "none", which means "no text part at all".
+        body_format = candidates[0][1] if candidates else "none"
+
+        for part, fmt in candidates:
+            text = self._body_text(uid, part, fmt)
+            if not text:
+                # An HTML newsletter's text/plain leg is sometimes a blank
+                # placeholder; keep going rather than reporting it as empty.
+                log.debug(
+                    "uid %s: body part %s (%s) is empty", uid, part.part_id, part.content_type
+                )
+                continue
+            body, body_format = text, fmt
+            break
+        else:
+            if candidates:
+                log.warning(
+                    "uid %s: every text part is empty (%s); returning an empty body",
+                    uid, ", ".join(f"{p.part_id} {p.content_type}" for p, _ in candidates),
+                )
+
+        body, truncated = truncate(body, max_chars)
 
         return Message(
             **summary.model_dump(by_alias=True),

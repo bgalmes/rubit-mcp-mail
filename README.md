@@ -299,8 +299,13 @@ src/rubit_mcp_mail/
   the `has_attachments` field on results comes from the message structure.
 - **Bodies are truncated** at 20,000 characters by default to keep long
   newsletters from flooding the context. Raise `max_chars` when you need more.
-- **`read_message` only downloads the text part**, located via `BODYSTRUCTURE`,
-  so reading a mail with a 20 MB attachment still costs a few kilobytes.
+- **`read_message` only downloads the text parts**, located via `BODYSTRUCTURE`,
+  so reading a mail with a 20 MB attachment still costs a few kilobytes. It
+  prefers `text/plain` but falls through to `text/html` when the plain part is
+  missing or empty — the shape many newsletters take. `body_format` says which
+  one you got. HTML is converted to Markdown with reference-style links, so a
+  newsletter that repeats the same tracking URL on every headline lists it once
+  at the foot instead of inline on every line.
 - **Microsoft is actively tightening third-party mail access.** IMAP+OAuth is
   documented and working, but if it were ever withdrawn for consumer accounts,
   the fix is a Graph backend behind the existing `MailBackend` protocol.
