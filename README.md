@@ -44,6 +44,57 @@ conda create -p ./.venv python=3.12 pip -y     # this machine has no python3-ven
 ./.venv/bin/python -m pip install -e .
 ```
 
+### Install on Windows
+
+Use a standard venv (no conda needed — `venv` ships with the Python installer
+on Windows) from PowerShell:
+
+```powershell
+cd C:\path\to\rubit-mcp-mail
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -e .
+```
+
+Everywhere the rest of this README shows `./.venv/bin/rubit-mcp-mail`, use
+`.venv\Scripts\rubit-mcp-mail.exe` instead (or `.venv\Scripts\python.exe -m
+rubit_mcp_mail` if you'd rather not depend on the `.exe` shim). For example:
+
+```powershell
+.venv\Scripts\rubit-mcp-mail.exe auth outlook
+.venv\Scripts\rubit-mcp-mail.exe doctor
+```
+
+The config file lives at `%USERPROFILE%\.config\rubit-mcp-mail\config.toml`
+— `Path.home() / ".config"` resolves there on Windows too, so create it the
+same way the [Configure](#2-configure) section shows, just with `mkdir` and a
+text editor instead of the `cat` heredoc:
+
+```powershell
+mkdir $env:USERPROFILE\.config\rubit-mcp-mail
+notepad $env:USERPROFILE\.config\rubit-mcp-mail\config.toml
+```
+
+Token storage is simpler on Windows than on Linux: `keyring` talks to the
+built-in **Windows Credential Manager** with no extra setup, so the
+DBUS/keyring workaround described in
+[Register with Claude Desktop](#register-with-claude-desktop) does not apply
+— every environment (terminal, Claude Desktop, a scheduled task) can already
+reach the same credential store.
+
+When registering with Claude Desktop on Windows, point `command` at the
+`.exe` directly in `%APPDATA%\Claude\claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "rubit-mail": {
+      "command": "C:\\path\\to\\rubit-mcp-mail\\.venv\\Scripts\\rubit-mcp-mail.exe",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
 ## Setting up Outlook
 
 Microsoft has permanently retired basic auth for Outlook.com, so app passwords
