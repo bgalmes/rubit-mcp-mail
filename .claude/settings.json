@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(python3 -c \"import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('file_path') or d.get('tool_input',{}).get('notebook_path') or '')\"); case \"$f\" in *.py) ;; *) exit 0 ;; esac; cd /home/bgalmes/Projects/rubit-mcp-mail || exit 0; [ -x .venv/bin/ruff ] || exit 0; .venv/bin/ruff format \"$f\" >/dev/null 2>&1; .venv/bin/ruff check --fix \"$f\" >/dev/null 2>&1; chk=$(.venv/bin/ruff check \"$f\" 2>&1); pr=$(.venv/bin/pyright --pythonpath .venv/bin/python 2>&1); ok=1; echo \"$chk\" | grep -q \"All checks passed\" || ok=0; echo \"$pr\" | grep -q \"^0 errors\" || ok=0; if [ \"$ok\" = \"0\" ]; then { echo \"Lint/type-check issues remain after editing $f:\"; echo \"$chk\"; echo \"$pr\"; } >&2; exit 2; fi; exit 0",
+            "timeout": 60,
+            "statusMessage": "Running ruff + pyright..."
+          }
+        ]
+      }
+    ]
+  }
+}
