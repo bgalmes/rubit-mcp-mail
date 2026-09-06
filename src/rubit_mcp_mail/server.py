@@ -7,6 +7,7 @@ tracebacks, because the model is the one reading them.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import sys
@@ -21,6 +22,7 @@ from pydantic import Field
 from .config import config_path
 from .mime import DEFAULT_MAX_CHARS
 from .models import AccountStatus, StaleHandleError
+from .permissions import TOOL_NAMES
 from .session import Session
 
 log = logging.getLogger(__name__)
@@ -61,6 +63,28 @@ def _fail(exc: Exception) -> str:
     return f"Error: {exc}"
 
 
+def guarded(fn):
+    """Block a tool call for an account that has it in `disabled_tools`.
+
+    If the account can't be resolved (missing config, unknown/ambiguous
+    name), defers to the wrapped function so its own error message is what
+    the model sees - this only adds a new failure mode, never removes one.
+    """
+    assert fn.__name__ in TOOL_NAMES, f"{fn.__name__!r} is not in permissions.TOOL_NAMES"
+
+    @functools.wraps(fn)
+    def wrapper(**kwargs):
+        try:
+            account = _session.account(kwargs.get("account"))
+        except Exception:  # noqa: BLE001
+            return fn(**kwargs)
+        if fn.__name__ in account.disabled_tools:
+            return _fail(ValueError(f"{fn.__name__!r} is disabled for account {account.name!r}"))
+        return fn(**kwargs)
+
+    return wrapper
+
+
 @mcp.tool(annotations=READ_ONLY)
 def list_accounts() -> list[AccountStatus] | str:
     """List configured mail accounts and whether each is authenticated.
@@ -91,6 +115,7 @@ def list_accounts() -> list[AccountStatus] | str:
 
 
 @mcp.tool(annotations=READ_ONLY)
+@guarded
 def list_folders(account: AccountArg = None) -> list[dict[str, Any]] | str:
     """List the folders in a mailbox with message and unread counts.
 
@@ -105,6 +130,7 @@ def list_folders(account: AccountArg = None) -> list[dict[str, Any]] | str:
 
 
 @mcp.tool(annotations=READ_ONLY)
+@guarded
 def list_messages(
     account: AccountArg = None,
     folder: FolderArg = "inbox",
@@ -127,6 +153,7 @@ def list_messages(
 
 
 @mcp.tool(annotations=READ_ONLY)
+@guarded
 def search_messages(
     account: AccountArg = None,
     folder: FolderArg = "inbox",
@@ -170,6 +197,7 @@ def search_messages(
 
 
 @mcp.tool(annotations=READ_ONLY)
+@guarded
 def read_message(
     handle: Annotated[str, Field(description="A handle from list_messages or search_messages.")],
     account: AccountArg = None,
@@ -197,6 +225,7 @@ def read_message(
 
 
 @mcp.tool(annotations=READ_ONLY)
+@guarded
 def get_attachment(
     handle: Annotated[str, Field(description="A handle from list_messages or search_messages.")],
     part_id: Annotated[str, Field(description="The `part_id` from read_message's attachments.")],

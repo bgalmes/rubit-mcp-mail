@@ -36,6 +36,41 @@ any folder that comes out as `other` can still be addressed by its raw name.
 so if the mailbox is renumbered you get a clear "re-run the search" error rather
 than the wrong message.
 
+## Permissions
+
+Any of the account-scoped tools (all but `list_accounts`) can be forbidden for
+a given account with `disabled_tools` in `config.toml`:
+
+```toml
+[accounts.personal]
+provider = "generic"
+email    = "you@fastmail.com"
+host     = "imap.fastmail.com"
+disabled_tools = ["get_attachment"]
+```
+
+A blocked call returns a plain `Error: ...` string to the model rather than
+failing silently. This is meant for future write tools (send, mark as
+read/unread, etc.) that don't exist yet, but it works against today's
+read-only tools too — for example to keep attachments off a shared account.
+
+Rather than editing TOML by hand, run:
+
+```bash
+rubit-mcp-mail permissions
+```
+
+This opens a small local web page (bound to `127.0.0.1` only — no
+authentication, same trust model as `python -m http.server`) listing every
+configured account with a checkbox per tool; unchecking one and saving writes
+`disabled_tools` back into `config.toml`, leaving every other line, comment,
+and ordering untouched. Use `--port` to pick a fixed port and `--no-browser`
+to skip auto-opening one.
+
+**A `serve` process caches its config on first read**, so toggling a
+permission here does not affect a *running* MCP server (e.g. one launched by
+Claude Desktop) until it is restarted.
+
 ## Install
 
 ```bash
@@ -328,9 +363,12 @@ API instead implements the `MailBackend` protocol in
 ```
 src/rubit_mcp_mail/
   server.py        MCP tool definitions
-  __main__.py      CLI: serve | auth | doctor
+  __main__.py      CLI: serve | auth | doctor | permissions
   session.py       wires config + auth + backend; attachment path safety
   config.py        TOML config -> Account models
+  permissions.py   registry of per-account-toggleable tool names
+  permissions_editor.py  pure logic for editing disabled_tools in config.toml
+  webui.py         local web GUI for the `permissions` command
   providers.py     provider profile registry
   secrets.py       keyring with 0600-file fallback
   models.py        pydantic models + message handles

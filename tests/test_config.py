@@ -57,6 +57,29 @@ port = 1993
             load_config(tmp_path / "absent.toml")
 
 
+class TestDisabledTools:
+    def test_loads_disabled_tools(self, write_config):
+        config = load_config(write_config('''
+[accounts.x]
+provider = "generic"
+email = "a@b.c"
+host = "h"
+disabled_tools = ["read_message", "get_attachment"]
+'''))
+        assert config.account("x").disabled_tools == ["read_message", "get_attachment"]
+
+    def test_defaults_to_empty(self, write_config):
+        config = load_config(write_config('[accounts.x]\nprovider="generic"\nemail="a@b.c"\nhost="h"'))
+        assert config.account("x").disabled_tools == []
+
+    def test_unknown_tool_name_is_caught(self, write_config):
+        with pytest.raises(ValueError, match="unknown tool.*send_mail"):
+            load_config(write_config(
+                '[accounts.x]\nprovider="generic"\nemail="a@b.c"\nhost="h"\n'
+                'disabled_tools = ["send_mail"]'
+            ))
+
+
 class TestProviderOverrides:
     def test_overrides_host_and_oauth_fields(self, write_config):
         config = load_config(

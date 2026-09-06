@@ -12,6 +12,7 @@ from pathlib import Path
 import tomllib
 from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_validator
 
+from .permissions import TOOL_NAMES
 from .providers import ImapProfile, apply_overrides, get_profile
 
 
@@ -25,6 +26,8 @@ class Account(BaseModel):
     host: str | None = None
     port: int | None = None
     ssl: bool | None = None
+    # MCP tool names forbidden for this account (see permissions.TOOL_NAMES).
+    disabled_tools: list[str] = Field(default_factory=list)
     # Set by load_config() from the config's top-level [providers.*] tables;
     # empty for accounts built directly (e.g. in tests).
     _provider_overrides: dict = PrivateAttr(default_factory=dict)
@@ -41,6 +44,11 @@ class Account(BaseModel):
             raise ValueError(
                 f"Account {self.name!r} needs a `client_id` - the Application (client) ID "
                 "of your Azure app registration. See the README for the setup steps."
+            )
+        if bad := sorted(set(self.disabled_tools) - set(TOOL_NAMES)):
+            raise ValueError(
+                f"Account {self.name!r} has unknown tool(s) in disabled_tools: "
+                f"{', '.join(bad)}. Valid tool names: {', '.join(TOOL_NAMES)}"
             )
         return self
 

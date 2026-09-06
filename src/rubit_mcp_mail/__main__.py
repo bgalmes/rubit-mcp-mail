@@ -1,4 +1,4 @@
-"""CLI: serve | auth | doctor.
+"""CLI: serve | auth | doctor | permissions.
 
 `auth` is a CLI command rather than an MCP tool because the device-code flow is
 interactive and blocking - it is a one-time setup step, not something a model
@@ -35,6 +35,13 @@ def cmd_serve(_args: argparse.Namespace) -> int:
     from .server import main as serve_main
 
     serve_main()
+    return 0
+
+
+def cmd_permissions(args: argparse.Namespace) -> int:
+    from .webui import serve
+
+    serve(port=args.port, open_browser=not args.no_browser)
     return 0
 
 
@@ -164,6 +171,17 @@ def main() -> int:
     doctor = sub.add_parser("doctor", help="Check config, auth, and connectivity.")
     doctor.add_argument("account", nargs="?", help="Only check this account.")
     doctor.set_defaults(func=cmd_doctor)
+
+    permissions = sub.add_parser(
+        "permissions", help="Open a local web GUI to allow/forbid tools per account."
+    )
+    permissions.add_argument(
+        "--port", type=int, default=0, help="Port to bind (default: pick a free one)."
+    )
+    permissions.add_argument(
+        "--no-browser", action="store_true", help="Don't open a browser automatically."
+    )
+    permissions.set_defaults(func=cmd_permissions)
 
     args = parser.parse_args()
     logging.basicConfig(

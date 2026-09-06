@@ -14,6 +14,7 @@ dependencies = [
     "pydantic>=2.7",
     "keyring>=25",
     "html2text>=2024.2.26",
+    "tomlkit>=0.12",
 ]
 
 [project.optional-dependencies]
