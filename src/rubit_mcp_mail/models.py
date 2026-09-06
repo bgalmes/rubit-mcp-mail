@@ -8,9 +8,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-FolderRole = Literal[
-    "inbox", "sent", "drafts", "junk", "trash", "archive", "other"
-]
+FolderRole = Literal["inbox", "sent", "drafts", "junk", "trash", "archive", "other"]
+
+BodyFormat = Literal["text", "html-converted", "none"]
 
 
 class StaleHandleError(Exception):
@@ -35,7 +35,7 @@ class MessageHandle(BaseModel):
         return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
 
     @classmethod
-    def decode(cls, handle: str) -> "MessageHandle":
+    def decode(cls, handle: str) -> MessageHandle:
         padded = handle + "=" * (-len(handle) % 4)
         try:
             raw = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
@@ -94,7 +94,7 @@ class Message(MessageSummary):
     cc: list[EmailAddress] = Field(default_factory=list)
     reply_to: list[EmailAddress] = Field(default_factory=list)
     body: str = ""
-    body_format: Literal["text", "html-converted", "none"] = "none"
+    body_format: BodyFormat = "none"
     truncated: bool = False
     attachments: list[Attachment] = Field(default_factory=list)
 

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from email.message import Message
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import cast
 
 from imapclient.response_types import Address, Envelope
 
@@ -35,17 +36,18 @@ def _flat_params(pairs) -> tuple | None:
 def _raw_payload(part: Message) -> bytes:
     """The payload as the server stores it: decoded from neither MIME nor charset."""
     payload = part.get_payload(decode=False)
-    return payload.encode("utf-8", "surrogateescape") if isinstance(payload, str) else payload
+    if isinstance(payload, str):
+        return payload.encode("utf-8", "surrogateescape")
+    assert isinstance(payload, bytes)
+    return payload
 
 
 def bodystructure(msg: Message, prefix: str = "") -> tuple:
     """Build the BODYSTRUCTURE tuple a server would report for this message."""
     if msg.is_multipart():
-        children = [bodystructure(p) for p in msg.get_payload()]
+        children = [bodystructure(p) for p in cast("list[Message]", msg.get_payload())]
         subtype = msg.get_content_subtype().upper().encode()
-        params = _flat_params(
-            [(k, v) for k, v in msg.get_params(failobj=[])[1:]]
-        )
+        params = _flat_params([(k, v) for k, v in msg.get_params(failobj=[])[1:]])
         # IMAPClient nests the children in a list at index 0; reproduce that
         # exactly, or these fixtures test a shape no server ever sends.
         return (children, subtype, params, None, None, None)
@@ -61,9 +63,10 @@ def bodystructure(msg: Message, prefix: str = "") -> tuple:
         # Text parts carry an extra line-count field before the extensions.
         node.append(raw.count(b"\n") + 1)
     disposition = None
-    if msg.get_content_disposition():
+    content_disposition = msg.get_content_disposition()
+    if content_disposition:
         disposition = (
-            msg.get_content_disposition().encode(),
+            content_disposition.encode(),
             _flat_params(msg.get_params(failobj=[], header="content-disposition")[1:]),
         )
     node += [disposition, None, None]
@@ -74,7 +77,7 @@ def part_bodies(msg: Message, prefix: str = "") -> dict[bytes, bytes]:
     """Map each leaf's `BODY[<part id>]` key to its still-encoded payload."""
     if msg.is_multipart():
         out: dict[bytes, bytes] = {}
-        for index, child in enumerate(msg.get_payload(), start=1):
+        for index, child in enumerate(cast("list[Message]", msg.get_payload()), start=1):
             child_id = f"{prefix}{index}" if not prefix else f"{prefix}.{index}"
             out |= part_bodies(child, child_id)
         return out
@@ -91,11 +94,14 @@ def _addresses(msg: Message, header: str):
     for name, addr in getaddresses(raw):
         mailbox, _, host = addr.partition("@")
         out.append(
+            # imapclient's Address dataclass declares these fields as plain
+            # bytes, but the library itself hands back None for absent ones
+            # (see its own Address docstring example) - the stubs just don't say so.
             Address(
-                name=name.encode() if name else None,
-                route=None,
-                mailbox=mailbox.encode() or None,
-                host=host.encode() or None,
+                name=name.encode() if name else None,  # type: ignore[arg-type]
+                route=None,  # type: ignore[arg-type]
+                mailbox=mailbox.encode() or None,  # type: ignore[arg-type]
+                host=host.encode() or None,  # type: ignore[arg-type]
             )
         )
     return tuple(out) or None
@@ -113,8 +119,8 @@ def envelope(msg: Message) -> Envelope:
         to=_addresses(msg, "to"),
         cc=_addresses(msg, "cc"),
         bcc=None,
-        in_reply_to=None,
-        message_id=(msg.get("message-id") or "").encode() or None,
+        in_reply_to=None,  # type: ignore[arg-type]
+        message_id=(msg.get("message-id") or "").encode() or None,  # type: ignore[arg-type]
     )
 
 

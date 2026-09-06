@@ -1,18 +1,45 @@
-import pytest
 from datetime import datetime
+from typing import cast
 
+import pytest
 from fake_imap import FakeIMAPClient
+
+# IMAPClient returns Envelope/Address namedtuples; mimic just enough of them.
+from imapclient import IMAPClient
+from imapclient.response_types import Address, Envelope
+
+from rubit_mcp_mail.auth.base import AuthStrategy
 from rubit_mcp_mail.backends.imap import ImapBackend
 from rubit_mcp_mail.config import Account
 from rubit_mcp_mail.models import MessageHandle, StaleHandleError
 
-# IMAPClient returns Envelope/Address namedtuples; mimic just enough of them.
-from imapclient.response_types import Address, Envelope
-
-TEXT_PART = (b"TEXT", b"PLAIN", (b"CHARSET", b"utf-8"), None, None, b"7BIT", 20, 1,
-             None, None, None, None)
-PDF_PART = (b"APPLICATION", b"PDF", (b"NAME", b"report.pdf"), None, None, b"BASE64",
-            100, None, (b"attachment", (b"FILENAME", b"report.pdf")), None, None)
+TEXT_PART = (
+    b"TEXT",
+    b"PLAIN",
+    (b"CHARSET", b"utf-8"),
+    None,
+    None,
+    b"7BIT",
+    20,
+    1,
+    None,
+    None,
+    None,
+    None,
+)
+PDF_PART = (
+    b"APPLICATION",
+    b"PDF",
+    (b"NAME", b"report.pdf"),
+    None,
+    None,
+    b"BASE64",
+    100,
+    None,
+    (b"attachment", (b"FILENAME", b"report.pdf")),
+    None,
+    None,
+)
 MIXED = (TEXT_PART, PDF_PART, b"MIXED", (b"BOUNDARY", b"b"), None, None, None)
 
 FOLDERS = [
@@ -24,13 +51,20 @@ FOLDERS = [
 
 
 def envelope(subject, sender, msgid):
+    # imapclient's Address/Envelope dataclasses declare these fields as plain
+    # bytes, but the library itself hands back None for absent ones (see its
+    # own Address docstring example) - the stubs just don't say so.
     return Envelope(
         date=datetime(2026, 8, 1, 9, 30),
         subject=subject.encode(),
-        from_=(Address(name=b"Alice", route=None, mailbox=b"alice", host=b"example.com"),),
-        sender=None, reply_to=None,
-        to=(Address(name=None, route=None, mailbox=b"me", host=b"outlook.com"),),
-        cc=None, bcc=None, in_reply_to=None, message_id=msgid.encode(),
+        from_=(Address(name=b"Alice", route=None, mailbox=b"alice", host=b"example.com"),),  # type: ignore[arg-type]
+        sender=None,
+        reply_to=None,
+        to=(Address(name=None, route=None, mailbox=b"me", host=b"outlook.com"),),  # type: ignore[arg-type]
+        cc=None,
+        bcc=None,
+        in_reply_to=None,  # type: ignore[arg-type]
+        message_id=msgid.encode(),  # type: ignore[arg-type]
     )
 
 
@@ -51,10 +85,11 @@ def make_backend(uidvalidity=1000):
         "Junk Email": {},
     }
     fake = FakeIMAPClient(FOLDERS, messages, uidvalidity=uidvalidity)
-    account = Account(name="test", provider="generic", email="me@outlook.com",
-                      host="imap.test.invalid")
-    backend = ImapBackend(account, auth=object())
-    backend._client = fake  # skip the network
+    account = Account(
+        name="test", provider="generic", email="me@outlook.com", host="imap.test.invalid"
+    )
+    backend = ImapBackend(account, auth=cast(AuthStrategy, object()))
+    backend._client = cast(IMAPClient, fake)  # skip the network
     return backend, fake
 
 
@@ -135,7 +170,10 @@ class TestReadOnly:
         backend.read_message(handle)
         # BODYSTRUCTURE is metadata; only indexed BODY[...] fetches set \Seen.
         body_fetches = [
-            k for c in fake.calls if c[0] == "fetch" for k in c[2]
+            k
+            for c in fake.calls
+            if c[0] == "fetch"
+            for k in c[2]
             if k.startswith("BODY[") or k.startswith("BODY.PEEK[")
         ]
         assert body_fetches and all(k.startswith("BODY.PEEK[") for k in body_fetches)
@@ -144,12 +182,23 @@ class TestReadOnly:
         """Guard against a future edit calling a mutating IMAP command."""
         import inspect
         import re
+
         from rubit_mcp_mail.backends import imap
 
         source = inspect.getsource(imap)
-        forbidden = ("add_flags", "remove_flags", "set_flags", "delete_messages",
-                     "expunge", "copy", "move", "append", "create_folder",
-                     "delete_folder", "rename_folder")
+        forbidden = (
+            "add_flags",
+            "remove_flags",
+            "set_flags",
+            "delete_messages",
+            "expunge",
+            "copy",
+            "move",
+            "append",
+            "create_folder",
+            "delete_folder",
+            "rename_folder",
+        )
         # Only calls on the IMAP client count; `criteria.append(...)` is a list op.
         called = set(re.findall(r"client\.(\w+)\s*\(", source))
         assert not called & set(forbidden), f"mutating IMAP calls: {called & set(forbidden)}"
@@ -206,7 +255,8 @@ class TestHandles:
 
     def test_handle_from_another_account_rejected(self):
         backend, _ = make_backend()
-        other = MessageHandle(account="somewhere-else", folder="INBOX",
-                              uidvalidity=1000, uid=1).encode()
+        other = MessageHandle(
+            account="somewhere-else", folder="INBOX", uidvalidity=1000, uid=1
+        ).encode()
         with pytest.raises(ValueError, match="belongs to account"):
             backend.read_message(other)

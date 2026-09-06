@@ -7,9 +7,9 @@ provider profile to use. Credentials come from SecretStore.
 from __future__ import annotations
 
 import os
-import tomllib
 from pathlib import Path
 
+import tomllib
 from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_validator
 
 from .providers import ImapProfile, apply_overrides, get_profile
@@ -30,12 +30,12 @@ class Account(BaseModel):
     _provider_overrides: dict = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="after")
-    def _check_against_profile(self) -> "Account":
+    def _check_against_profile(self) -> Account:
         profile = get_profile(self.provider)
         if profile.requires_host and not (self.host or profile.host):
             raise ValueError(
                 f"Account {self.name!r} uses the {self.provider!r} provider, "
-                "which needs an explicit `host` (e.g. host = \"imap.fastmail.com\")."
+                'which needs an explicit `host` (e.g. host = "imap.fastmail.com").'
             )
         if profile.auth == "oauth_microsoft" and not self.client_id:
             raise ValueError(
@@ -68,9 +68,7 @@ class Config(BaseModel):
     def account(self, name: str | None) -> Account:
         """Resolve an account by name, defaulting when only one is configured."""
         if not self.accounts:
-            raise ValueError(
-                f"No accounts configured. Create {config_path()} - see the README."
-            )
+            raise ValueError(f"No accounts configured. Create {config_path()} - see the README.")
         if name is None:
             if len(self.accounts) == 1:
                 return next(iter(self.accounts.values()))
@@ -100,9 +98,7 @@ def config_path() -> Path:
 def load_config(path: Path | None = None) -> Config:
     path = path or config_path()
     if not path.exists():
-        raise FileNotFoundError(
-            f"No config at {path}. Create it - see the README for a template."
-        )
+        raise FileNotFoundError(f"No config at {path}. Create it - see the README for a template.")
     with path.open("rb") as fh:
         raw = tomllib.load(fh)
 

@@ -15,6 +15,7 @@ from imapclient import IMAPClient
 from imapclient.exceptions import LoginError
 
 from ..config import Account
+from ..providers import MicrosoftOAuth
 from ..secrets import SecretStore
 from .base import NeedsAuthError
 
@@ -26,11 +27,10 @@ class MicrosoftDeviceCodeAuth:
         self._account = account
         self._store = store
         self.secret_key = f"msal-cache:{account.name}"
-        self._oauth = account.profile.oauth
-        if self._oauth is None:
-            raise ValueError(
-                f"Provider {account.provider!r} has no OAuth configuration."
-            )
+        oauth = account.profile.oauth
+        if oauth is None:
+            raise ValueError(f"Provider {account.provider!r} has no OAuth configuration.")
+        self._oauth: MicrosoftOAuth = oauth
 
     # -- MSAL plumbing ---------------------------------------------------
     def _load_cache(self) -> msal.SerializableTokenCache:
@@ -74,7 +74,8 @@ class MicrosoftDeviceCodeAuth:
         cache.deserialize(blob)
         app = self._app(cache)
         accounts = [
-            a for a in app.get_accounts()
+            a
+            for a in app.get_accounts()
             if a.get("username", "").lower() == self._account.email.lower()
         ]
         if not accounts:

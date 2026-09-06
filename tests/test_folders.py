@@ -1,7 +1,8 @@
+from datetime import date
+
 import pytest
 
 from rubit_mcp_mail.backends.imap import build_search_criteria, folder_role
-from datetime import date
 
 
 @pytest.mark.parametrize(
@@ -23,7 +24,7 @@ from datetime import date
         ([], "[Gmail]/Sent Mail", "sent"),
         ([], "[Gmail]/Spam", "junk"),
         ([], "[Gmail]/All Mail", "archive"),
-        ([], "[Gmail]/Bin", "trash"),   # Gmail's en-GB name for Trash
+        ([], "[Gmail]/Bin", "trash"),  # Gmail's en-GB name for Trash
         # Ordinary user folders stay 'other'.
         ([], "Projects/Client", "other"),
         ([], "Receipts", "other"),
@@ -38,26 +39,26 @@ def test_folder_role(flags, name, expected):
     [
         # Outlook.com does not advertise SPECIAL-USE, so localized mailboxes
         # depend entirely on name matching.
-        ("Elementos enviados", "sent"),        # es
+        ("Elementos enviados", "sent"),  # es
         ("Correo no deseado", "junk"),
         ("Elementos eliminados", "trash"),
         ("Borradores", "drafts"),
         ("Archivo", "archive"),
-        ("Elements enviats", "sent"),          # ca
+        ("Elements enviats", "sent"),  # ca
         ("Correu brossa", "junk"),
         ("Elements suprimits", "trash"),
         ("Esborranys", "drafts"),
         ("Arxiu", "archive"),
-        ("\u00c9l\u00e9ments envoy\u00e9s", "sent"),          # fr, accented
+        ("\u00c9l\u00e9ments envoy\u00e9s", "sent"),  # fr, accented
         ("Courrier ind\u00e9sirable", "junk"),
         ("\u00c9l\u00e9ments supprim\u00e9s", "trash"),
-        ("Gesendete Elemente", "sent"),        # de
+        ("Gesendete Elemente", "sent"),  # de
         ("Gel\u00f6schte Elemente", "trash"),
         ("Entw\u00fcrfe", "drafts"),
-        ("Posta inviata", "sent"),             # it
+        ("Posta inviata", "sent"),  # it
         ("Posta indesiderata", "junk"),
         ("Posta eliminata", "trash"),
-        ("Itens Enviados", "sent"),            # pt
+        ("Itens Enviados", "sent"),  # pt
         ("Lixo Eletr\u00f4nico", "junk"),
         ("Itens Exclu\u00eddos", "trash"),
     ],

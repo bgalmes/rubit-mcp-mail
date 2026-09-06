@@ -14,7 +14,6 @@ from datetime import date
 from typing import Protocol, runtime_checkable
 
 from ..mime import DEFAULT_MAX_CHARS
-
 from ..models import Folder, Message, MessageSummary
 
 

@@ -15,8 +15,7 @@ class NeedsAuthError(Exception):
         self.account = account
         suffix = f" ({detail})" if detail else ""
         super().__init__(
-            f"Account {account!r} is not authenticated{suffix}. "
-            f"Run: rubit-mcp-mail auth {account}"
+            f"Account {account!r} is not authenticated{suffix}. Run: rubit-mcp-mail auth {account}"
         )
 
 
@@ -36,7 +35,9 @@ class AuthStrategy(Protocol):
 
     def interactive_setup(self) -> str:
         """Run the one-time interactive flow. Returns a human-readable result."""
+        ...
 
     def status(self) -> tuple[str, str | None]:
         """Return ("ok"|"needs_auth"|"error", detail) without any network round-trip
         that would require user interaction."""
+        ...

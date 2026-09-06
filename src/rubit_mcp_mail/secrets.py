@@ -68,9 +68,7 @@ class SecretStore:
                 self._resolved = (None, f"keyring unusable ({type(exc).__name__}: {exc})")
 
         module, reason = self._resolved
-        log.debug(
-            "secret backend: %s", reason if module is None else f"keyring ({reason})"
-        )
+        log.debug("secret backend: %s", reason if module is None else f"keyring ({reason})")
         return self._resolved
 
     def _keyring(self):
@@ -123,9 +121,7 @@ class SecretStore:
             except Exception:  # noqa: BLE001
                 log.debug("keyring read failed for %s; falling back to file", key)
         value = self._read_file().get(key)
-        log.debug(
-            "secret %s: %s in %s", key, "found" if value else "NOT found", self._path
-        )
+        log.debug("secret %s: %s in %s", key, "found" if value else "NOT found", self._path)
         return value
 
     def set(self, key: str, value: str) -> str:
