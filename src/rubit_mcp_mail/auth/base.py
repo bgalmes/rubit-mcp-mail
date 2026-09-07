@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import getpass
 from typing import Protocol, runtime_checkable
 
 from imapclient import IMAPClient
@@ -20,6 +21,42 @@ class NeedsAuthError(Exception):
 
 
 @runtime_checkable
+class AuthUI(Protocol):
+    """How an interactive sign-in talks to whoever is driving it.
+
+    The CLI drives it with a terminal; the setup wizard drives it with a
+    window. Keeping this seam narrow is what lets the wizard reuse the real
+    sign-in flows below instead of reimplementing them.
+    """
+
+    def device_code(self, flow: dict) -> None:
+        """Show the user the code and URL of an OAuth device-code flow.
+
+        Called once, before the (blocking) wait for them to approve it.
+        """
+
+    def ask_password(self, account: Account) -> str:
+        """Collect the app password for `account`. Empty means "cancelled"."""
+        ...
+
+
+class ConsoleAuthUI:
+    """Terminal implementation: what `rubit-mcp-mail auth` has always printed."""
+
+    def device_code(self, flow: dict) -> None:
+        print()
+        print(flow["message"])
+        print()
+        print("Waiting for you to complete sign-in in the browser...")
+
+    def ask_password(self, account: Account) -> str:
+        print(f"Account : {account.name} <{account.email}>")
+        print(f"Server  : {account.profile.host}:{account.profile.port}")
+        print("Enter the app password for this mailbox (input is hidden).")
+        return getpass.getpass("App password: ").strip()
+
+
+@runtime_checkable
 class AuthStrategy(Protocol):
     """Knows how to authenticate an already-connected IMAPClient."""
 
@@ -33,8 +70,11 @@ class AuthStrategy(Protocol):
     def login(self, client: IMAPClient) -> None:
         """Authenticate `client`, or raise NeedsAuthError."""
 
-    def interactive_setup(self) -> str:
-        """Run the one-time interactive flow. Returns a human-readable result."""
+    def interactive_setup(self, ui: AuthUI | None = None) -> str:
+        """Run the one-time interactive flow. Returns a human-readable result.
+
+        `ui` defaults to the console, so the CLI needs no argument.
+        """
         ...
 
     def status(self) -> tuple[str, str | None]:

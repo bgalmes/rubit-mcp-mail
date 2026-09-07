@@ -9,6 +9,29 @@ and bodies are fetched with `BODY.PEEK`, so reading a message does not even mark
 it as read. There are no send, move, delete, or flag code paths, and a test
 asserts none are ever added.
 
+## Quick install
+
+Download the installer for your system from the
+[latest release](https://github.com/bgalmes/rubit-mcp-mail/releases/latest) and
+run it:
+
+| System | File |
+| --- | --- |
+| Windows | `rubit-mcp-mail-setup-windows.exe` |
+| Linux | `rubit-mcp-mail-setup-linux` — `chmod +x` it first |
+
+Nothing needs to be installed beforehand: Python and every dependency are inside
+that one file. A window asks for your provider and email address, signs you in,
+and registers the mail server with Claude Desktop and Claude Code if it finds
+them — restart Claude Desktop afterwards and your mail is there.
+
+Run it again whenever you want to add a second mailbox or repair a sign-in; it
+updates what is already configured rather than replacing it. On a machine with
+no desktop (over SSH, say) the same file walks you through it in the terminal.
+
+Everything below is the manual setup that installer automates — read on if you
+want to run from source or something needs fixing by hand.
+
 ## Tools
 
 | Tool | What it does |
@@ -358,12 +381,33 @@ API instead implements the `MailBackend` protocol in
 ./.venv/bin/python -m pytest -q
 ```
 
+### Building the installers
+
+`.github/workflows/release.yml` builds them for Windows and Linux and attaches
+them to every published release. The same two steps build one locally — the
+server executable first, then the installer that carries it:
+
+```bash
+./.venv/bin/python -m pip install -e ".[build]"
+./.venv/bin/pyinstaller --onefile --name rubit-mcp-mail packaging/cli_entry.py
+./.venv/bin/pyinstaller --onefile --windowed --name rubit-mcp-mail-setup \
+  --add-binary "dist/rubit-mcp-mail:." packaging/setup_entry.py
+```
+
+On Windows the `--add-binary` separator is `;` rather than `:`. The wizard
+unpacks the server executable into `~/.local/share/rubit-mcp-mail/bin`
+(`%LOCALAPPDATA%\Programs\rubit-mcp-mail` on Windows) and registers that path,
+so the installer itself can be deleted afterwards.
+
 ## Layout
 
 ```
 src/rubit_mcp_mail/
   server.py        MCP tool definitions
-  __main__.py      CLI: serve | auth | doctor | permissions
+  __main__.py      CLI: serve | auth | doctor | permissions | install
+  installer.py     setup wizard: writes config, signs in, registers with Claude
+  installer_gui.py the setup window (tkinter), falling back to the terminal
+  claude_registration.py  claude_desktop_config.json / `claude mcp add`
   session.py       wires config + auth + backend; attachment path safety
   config.py        TOML config -> Account models
   permissions.py   registry of per-account-toggleable tool names

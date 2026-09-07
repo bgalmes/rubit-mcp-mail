@@ -1,0 +1,92 @@
+name: Build installers
+
+# Publishing a release attaches a ready-to-run installer for each platform to
+# it. workflow_dispatch is here so the build - especially the Windows half -
+# can be exercised without cutting a release first.
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash # also on Windows, so one set of steps covers both
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+            ext: ""
+            sep: ":"
+            asset: rubit-mcp-mail-setup-linux
+          - os: windows-latest
+            label: Windows
+            ext: ".exe"
+            sep: ";"
+            asset: rubit-mcp-mail-setup-windows.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Gives PyInstaller the Tcl/Tk shared libraries to bundle on Linux.
+      - name: Install Tk (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk tk
+
+      - name: Install the project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,build]"
+
+      # The wizard is the whole point of the installer, so a Python that cannot
+      # open a window must fail here rather than ship a binary that greets the
+      # user with a fallback prompt.
+      - name: Check tkinter is available
+        run: python -c "import tkinter; print('Tk', tkinter.TkVersion)"
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      # Console build: this is what Claude launches and talks to over stdio.
+      - name: Build the server executable
+        run: pyinstaller --onefile --clean --name rubit-mcp-mail packaging/cli_entry.py
+
+      - name: Smoke-test the server executable
+        run: "dist/rubit-mcp-mail${{ matrix.ext }} --help"
+
+      # Windowed build, carrying the server executable above inside it: the
+      # wizard unpacks that into a permanent directory and registers its path,
+      # so the installer itself can be deleted afterwards.
+      - name: Build the installer
+        run: |
+          pyinstaller --onefile --clean --windowed \
+            --name rubit-mcp-mail-setup \
+            --add-binary "dist/rubit-mcp-mail${{ matrix.ext }}${{ matrix.sep }}." \
+            packaging/setup_entry.py
+
+      - name: Name the asset
+        run: mv "dist/rubit-mcp-mail-setup${{ matrix.ext }}" "${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset }}

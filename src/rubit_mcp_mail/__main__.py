@@ -1,4 +1,4 @@
-"""CLI: serve | auth | doctor | permissions.
+"""CLI: serve | auth | doctor | permissions | install.
 
 `auth` is a CLI command rather than an MCP tool because the device-code flow is
 interactive and blocking - it is a one-time setup step, not something a model
@@ -43,6 +43,12 @@ def cmd_permissions(args: argparse.Namespace) -> int:
 
     serve(port=args.port, open_browser=not args.no_browser)
     return 0
+
+
+def cmd_install(args: argparse.Namespace) -> int:
+    from .installer_gui import run
+
+    return run(force_console=args.console)
 
 
 def cmd_auth(args: argparse.Namespace) -> int:
@@ -163,6 +169,14 @@ def main() -> int:
     sub.add_parser("serve", help="Run the MCP server on stdio (default).").set_defaults(
         func=cmd_serve
     )
+
+    install = sub.add_parser(
+        "install", help="Set up an account step by step: config, sign-in, and Claude."
+    )
+    install.add_argument(
+        "--console", action="store_true", help="Use text prompts instead of a window."
+    )
+    install.set_defaults(func=cmd_install)
 
     auth = sub.add_parser("auth", help="Sign in to an account (one-time, interactive).")
     auth.add_argument("account", nargs="?", help="Account name; optional if only one.")

@@ -6,14 +6,12 @@ basic auth for those. Use the `outlook` provider instead.
 
 from __future__ import annotations
 
-import getpass
-
 from imapclient import IMAPClient
 from imapclient.exceptions import LoginError
 
 from ..config import Account
 from ..secrets import SecretStore
-from .base import NeedsAuthError
+from .base import AuthUI, ConsoleAuthUI, NeedsAuthError
 
 
 class PasswordAuth:
@@ -38,11 +36,9 @@ class PasswordAuth:
         except LoginError as exc:
             raise NeedsAuthError(self._account.name, f"server rejected login: {exc}") from exc
 
-    def interactive_setup(self) -> str:
-        print(f"Account : {self._account.name} <{self._account.email}>")
-        print(f"Server  : {self._account.profile.host}:{self._account.profile.port}")
-        print("Enter the app password for this mailbox (input is hidden).")
-        password = getpass.getpass("App password: ").strip()
+    def interactive_setup(self, ui: AuthUI | None = None) -> str:
+        ui = ui or ConsoleAuthUI()
+        password = ui.ask_password(self._account).strip()
         if not password:
             raise ValueError("No password entered; nothing stored.")
         where = self._store.set(self.secret_key, password)
