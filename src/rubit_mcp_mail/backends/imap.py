@@ -1,10 +1,16 @@
-"""Read-only IMAP backend.
+"""Mostly-read-only IMAP backend.
 
 Read-only is enforced in two places, both of which matter:
   * every folder is opened with readonly=True, which issues EXAMINE not SELECT;
   * every body fetch uses BODY.PEEK[...], never BODY[...], which would set \\Seen
     as a side effect of reading.
-There are no STORE/APPEND/EXPUNGE/COPY calls anywhere in this module.
+
+The two deliberate exceptions are `mark_read` (STORE +\\Seen) and
+`move_message` (MOVE, or IMAPClient's COPY+STORE\\Deleted+EXPUNGE emulation on
+servers without RFC 6851). Both SELECT their folder with readonly=False - the
+only place in this module that happens - and are gated at the tool layer by
+Account.can_write, off by default. No other mutating IMAP command is used
+anywhere in this module.
 """
 
 from __future__ import annotations
@@ -250,10 +256,15 @@ class ImapBackend:
         known = ", ".join(sorted(n for _f, n in self._raw_folders()))
         raise ValueError(f"No folder matching {folder!r}. Available: {known}")
 
-    def _select(self, folder: str) -> int:
-        """EXAMINE the folder (never SELECT) and return its UIDVALIDITY."""
+    def _select(self, folder: str, readonly: bool = True) -> int:
+        """Open the folder and return its UIDVALIDITY.
+
+        EXAMINE (readonly=True, the default) for every read path; SELECT
+        (readonly=False) only for mark_read/move_message, the sole
+        intentional mutations in this module.
+        """
         name = self.resolve_folder(folder)
-        info = self._retry(self.client.select_folder, name, readonly=True)
+        info = self._retry(self.client.select_folder, name, readonly=readonly)
         self._selected = name
         return int(info.get(b"UIDVALIDITY", 0))
 
@@ -353,13 +364,13 @@ class ImapBackend:
         return self._page(folder, criteria, limit, offset)
 
     # -- reading ---------------------------------------------------------
-    def _open_handle(self, handle: str) -> MessageHandle:
+    def _open_handle(self, handle: str, readonly: bool = True) -> MessageHandle:
         parsed = MessageHandle.decode(handle)
         if parsed.account != self._account.name:
             raise ValueError(
                 f"Handle belongs to account {parsed.account!r}, not {self._account.name!r}."
             )
-        current = self._select(parsed.folder)
+        current = self._select(parsed.folder, readonly=readonly)
         if current != parsed.uidvalidity:
             raise StaleHandleError(
                 f"Folder {parsed.folder!r} was renumbered since this handle was issued "
@@ -466,3 +477,22 @@ class ImapBackend:
 
         filename = match.filename or f"part-{part_id}"
         return filename, raw
+
+    # -- writing (gated by Account.can_write, off by default) ------------
+    def mark_read(self, handle: str) -> None:
+        parsed = self._open_handle(handle, readonly=False)
+        self._retry(self.client.add_flags, [parsed.uid], [b"\\Seen"])
+
+    def move_message(self, handle: str, folder: str) -> str:
+        """Move the message to `folder`, returning the destination's name.
+
+        The message's UID (and possibly UIDVALIDITY) in the destination is
+        not reported back - relying on UIDPLUS/COPYUID responses is not
+        portable across servers - so the caller's handle is stale afterwards;
+        a fresh list/search against the destination folder is needed to get
+        one that points at the moved message.
+        """
+        parsed = self._open_handle(handle, readonly=False)
+        dest = self.resolve_folder(folder)
+        self._retry(self.client.move, [parsed.uid], dest)
+        return dest

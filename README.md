@@ -1,13 +1,15 @@
 # rubit-mcp-mail
 
-A read-only MCP server for reading your mail. Provider-agnostic: it speaks IMAP,
-so it works with Outlook.com, Gmail, Fastmail, iCloud, or a self-hosted server —
-the provider is a line of config, not a code change.
+An MCP server for reading your mail. Provider-agnostic: it speaks IMAP, so it
+works with Outlook.com, Gmail, Fastmail, iCloud, or a self-hosted server — the
+provider is a line of config, not a code change.
 
-**Read-only by construction.** Folders are opened with `EXAMINE`, never `SELECT`,
+**Read-only by default.** Folders are opened with `EXAMINE`, never `SELECT`,
 and bodies are fetched with `BODY.PEEK`, so reading a message does not even mark
-it as read. There are no send, move, delete, or flag code paths, and a test
-asserts none are ever added.
+it as read. Two write actions exist - marking a message as read and moving it
+to another folder - but each is off unless explicitly turned on per account;
+see [Permissions](#permissions). There is no send, delete, or trash code path
+at all, and a test asserts none is ever added.
 
 ## Tools
 
@@ -19,6 +21,8 @@ asserts none are ever added.
 | `search_messages` | Server-side search by text, sender, subject, date range, unread |
 | `read_message` | Full headers, body text, attachment metadata |
 | `get_attachment` | Save one attachment into the download directory |
+| `mark_read` | Mark a message as read. **Off by default** — see [Permissions](#permissions) |
+| `move_message` | Move a message to another folder. **Off by default** — see [Permissions](#permissions) |
 
 Folders are addressed by **role** — `inbox`, `sent`, `drafts`, `junk`, `trash`,
 `archive` — so you never need to know that Outlook calls it `Junk Email` while
@@ -50,9 +54,27 @@ disabled_tools = ["get_attachment"]
 ```
 
 A blocked call returns a plain `Error: ...` string to the model rather than
-failing silently. This is meant for future write tools (send, mark as
-read/unread, etc.) that don't exist yet, but it works against today's
-read-only tools too — for example to keep attachments off a shared account.
+failing silently. This works against the read-only tools too — for example to
+keep attachments off a shared account.
+
+### Write access (`mark_read`, `move_message`)
+
+Write tools work the other way round: **off unless explicitly enabled**,
+rather than on unless disabled. Each account also has a parent switch,
+`allow_write`, that must be `true` before either write tool can run at all —
+turning it off disables both regardless of `enabled_write_tools`:
+
+```toml
+[accounts.personal]
+provider = "generic"
+email    = "you@fastmail.com"
+host     = "imap.fastmail.com"
+allow_write = true
+enabled_write_tools = ["mark_read"]   # move_message is still off
+```
+
+There is no delete or trash tool, and none is planned — this server can read
+and (optionally) reorganize mail, but it can never remove it.
 
 Rather than editing TOML by hand, run:
 
@@ -64,8 +86,9 @@ This opens a small local web page (bound to `127.0.0.1` only — no
 authentication, same trust model as `python -m http.server`) listing every
 configured account with a checkbox per tool; unchecking one and saving writes
 `disabled_tools` back into `config.toml`, leaving every other line, comment,
-and ordering untouched. Use `--port` to pick a fixed port and `--no-browser`
-to skip auto-opening one.
+and ordering untouched. A separate "Write access" section on the same page
+covers the parent `allow_write` switch and the two write tools. Use `--port`
+to pick a fixed port and `--no-browser` to skip auto-opening one.
 
 **A `serve` process caches its config on first read**, so toggling a
 permission here does not affect a *running* MCP server (e.g. one launched by
@@ -366,8 +389,8 @@ src/rubit_mcp_mail/
   __main__.py      CLI: serve | auth | doctor | permissions
   session.py       wires config + auth + backend; attachment path safety
   config.py        TOML config -> Account models
-  permissions.py   registry of per-account-toggleable tool names
-  permissions_editor.py  pure logic for editing disabled_tools in config.toml
+  permissions.py   registry of per-account-toggleable read and write tool names
+  permissions_editor.py  pure logic for editing permissions in config.toml
   webui.py         local web GUI for the `permissions` command
   providers.py     provider profile registry
   secrets.py       keyring with 0600-file fallback
