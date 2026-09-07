@@ -28,6 +28,11 @@ class ImapProfile(BaseModel):
     requires_host: bool = False
 
 
+# Thunderbird's public client ID. Documented in the README as the fallback for
+# users whose Microsoft account cannot register an Azure app; kept here so the
+# GUI can offer it without a second copy of the literal.
+THUNDERBIRD_CLIENT_ID = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
+
 PROFILES: dict[str, ImapProfile] = {
     "outlook": ImapProfile(
         auth="oauth_microsoft",

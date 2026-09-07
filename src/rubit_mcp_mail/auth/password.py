@@ -38,15 +38,23 @@ class PasswordAuth:
         except LoginError as exc:
             raise NeedsAuthError(self._account.name, f"server rejected login: {exc}") from exc
 
+    def store_password(self, password: str) -> str:
+        """Persist an app password from any front end. Returns where it landed.
+
+        Split out of `interactive_setup` so a non-terminal caller (the GUI) can
+        store a password without a getpass prompt, and still through the one
+        SecretStore path - there is no second place for a credential to live.
+        """
+        password = (password or "").strip()
+        if not password:
+            raise ValueError("No password entered; nothing stored.")
+        return f"Password stored in {self._store.set(self.secret_key, password)}."
+
     def interactive_setup(self) -> str:
         print(f"Account : {self._account.name} <{self._account.email}>")
         print(f"Server  : {self._account.profile.host}:{self._account.profile.port}")
         print("Enter the app password for this mailbox (input is hidden).")
-        password = getpass.getpass("App password: ").strip()
-        if not password:
-            raise ValueError("No password entered; nothing stored.")
-        where = self._store.set(self.secret_key, password)
-        return f"Password stored in {where}."
+        return self.store_password(getpass.getpass("App password: "))
 
     def status(self) -> tuple[str, str | None]:
         if self._password():

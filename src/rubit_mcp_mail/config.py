@@ -89,7 +89,7 @@ class Config(BaseModel):
             raise ValueError(f"Unknown account {name!r}. Configured: {known}") from None
 
 
-def _first_error(exc: ValidationError) -> str:
+def first_error(exc: ValidationError) -> str:
     err = exc.errors()[0]
     msg = err["msg"].removeprefix("Value error, ")
     loc = ".".join(str(part) for part in err["loc"])
@@ -125,7 +125,7 @@ def load_config(path: Path | None = None) -> Config:
         except ValidationError as exc:
             # Surface our own validator text; pydantic's wrapper buries the
             # setup guidance under a URL the user does not need.
-            raise ValueError(_first_error(exc)) from None
+            raise ValueError(first_error(exc)) from None
         account._provider_overrides = providers_raw.get(account.provider, {})
         accounts[name] = account
     download_dir = Path(
