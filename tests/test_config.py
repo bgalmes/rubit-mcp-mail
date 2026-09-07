@@ -11,12 +11,14 @@ def write_config(tmp_path):
         path = tmp_path / "config.toml"
         path.write_text(body)
         return path
+
     return _write
 
 
 class TestConfig:
     def test_loads_accounts(self, write_config):
-        config = load_config(write_config('''
+        config = load_config(
+            write_config("""
 [accounts.outlook]
 provider = "outlook"
 email = "me@outlook.com"
@@ -26,7 +28,8 @@ provider = "generic"
 email = "me@example.com"
 host = "imap.example.com"
 port = 1993
-'''))
+""")
+        )
         assert set(config.accounts) == {"outlook", "work"}
         assert config.account("outlook").profile.host == "outlook.office365.com"
         assert config.account("outlook").profile.auth == "oauth_microsoft"
@@ -56,7 +59,8 @@ port = 1993
 
 class TestProviderOverrides:
     def test_overrides_host_and_oauth_fields(self, write_config):
-        config = load_config(write_config('''
+        config = load_config(
+            write_config("""
 [accounts.x]
 provider = "outlook"
 email = "a@b.c"
@@ -68,14 +72,17 @@ host = "outlook.example.net"
 [providers.outlook.oauth]
 authority = "https://login.example.net/common"
 scopes = ["https://example.net/IMAP.AccessAsUser.All"]
-'''))
+""")
+        )
         profile = config.account("x").profile
         assert profile.host == "outlook.example.net"
+        assert profile.oauth is not None
         assert profile.oauth.authority == "https://login.example.net/common"
         assert profile.oauth.scopes == ["https://example.net/IMAP.AccessAsUser.All"]
 
     def test_override_does_not_leak_to_other_providers(self, write_config):
-        config = load_config(write_config('''
+        config = load_config(
+            write_config("""
 [accounts.outlook]
 provider = "outlook"
 email = "a@b.c"
@@ -87,16 +94,19 @@ host = "imap.example.com"
 
 [providers.outlook]
 host = "outlook.example.net"
-'''))
+""")
+        )
         assert config.account("outlook").profile.host == "outlook.example.net"
         assert config.account("other").profile.host == "imap.example.com"
 
     def test_unknown_override_key_is_caught(self, write_config):
         with pytest.raises(ValueError, match="Unknown provider override"):
-            load_config(write_config(
-                '[providers.outlook]\nnope = "x"\n'
-                '[accounts.x]\nprovider="outlook"\nemail="a@b.c"\nclient_id="abc"'
-            ))
+            load_config(
+                write_config(
+                    '[providers.outlook]\nnope = "x"\n'
+                    '[accounts.x]\nprovider="outlook"\nemail="a@b.c"\nclient_id="abc"'
+                )
+            )
 
     def test_unknown_provider_name_is_caught(self, write_config):
         with pytest.raises(ValueError, match="Known providers: generic, outlook"):
@@ -130,15 +140,18 @@ class TestAccountResolution:
 
 
 class TestSafeFilename:
-    @pytest.mark.parametrize("given,expected", [
-        ("report.pdf", "report.pdf"),
-        ("../../etc/passwd", "passwd"),
-        ("..\\..\\windows\\win.ini", "win.ini"),
-        ("/absolute/path.txt", "path.txt"),
-        ("", "attachment"),
-        ("...", "attachment"),
-        (".hidden", "hidden"),
-    ])
+    @pytest.mark.parametrize(
+        "given,expected",
+        [
+            ("report.pdf", "report.pdf"),
+            ("../../etc/passwd", "passwd"),
+            ("..\\..\\windows\\win.ini", "win.ini"),
+            ("/absolute/path.txt", "path.txt"),
+            ("", "attachment"),
+            ("...", "attachment"),
+            (".hidden", "hidden"),
+        ],
+    )
     def test_sanitization(self, given, expected):
         assert safe_filename(given) == expected
 
@@ -148,7 +161,9 @@ class TestSafeFilename:
 
 class TestDownloadPath:
     def _session(self, tmp_path):
-        return Session(config=Config(download_dir=tmp_path / "dl"), store=SecretStore(tmp_path / "s.json"))
+        return Session(
+            config=Config(download_dir=tmp_path / "dl"), store=SecretStore(tmp_path / "s.json")
+        )
 
     def test_writes_inside_download_dir(self, tmp_path):
         path = self._session(tmp_path).download_path("report.pdf")

@@ -13,9 +13,11 @@ import logging
 import re
 import unicodedata
 from datetime import date
+from typing import cast
 
 from imapclient import IMAPClient
 from imapclient.exceptions import IMAPClientAbortError, IMAPClientError
+from imapclient.response_types import Envelope
 
 from ..auth.base import AuthStrategy
 from ..config import Account
@@ -32,7 +34,15 @@ from ..mime import (
     truncate,
     walk_bodystructure,
 )
-from ..models import Folder, FolderRole, Message, MessageHandle, MessageSummary, StaleHandleError
+from ..models import (
+    BodyFormat,
+    Folder,
+    FolderRole,
+    Message,
+    MessageHandle,
+    MessageSummary,
+    StaleHandleError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -53,14 +63,23 @@ SPECIAL_USE = {
 # because a Spanish mailbox calls its sent folder "Elementos enviados".
 # INBOX is exempt: it is always literally "INBOX" on the wire, in every locale.
 NAME_PATTERNS: list[tuple[str, FolderRole]] = [
-    (r"^inbox$|bandeja de entrada|safata d.entrada|boite de reception|"
-     r"posteingang|caixa de entrada|posta in arrivo", "inbox"),
+    (
+        r"^inbox$|bandeja de entrada|safata d.entrada|boite de reception|"
+        r"posteingang|caixa de entrada|posta in arrivo",
+        "inbox",
+    ),
     (r"sent|enviad|enviat|envoy|gesendete|inviata|itens enviados", "sent"),
     (r"draft|borrador|esborrany|brouillon|entwurf|entwurfe|bozze|rascunho", "drafts"),
-    (r"junk|spam|bulk|no deseado|brossa|indesirable|indesiderata|lixo|"
-     r"unerwunscht", "junk"),
-    (r"trash|deleted|elimin|suprimit|supprim|gelosch|papierkorb|papelera|"
-     r"excluid|cestino|bin$", "trash"),
+    (
+        r"junk|spam|bulk|no deseado|brossa|indesirable|indesiderata|lixo|"
+        r"unerwunscht",
+        "junk",
+    ),
+    (
+        r"trash|deleted|elimin|suprimit|supprim|gelosch|papierkorb|papelera|"
+        r"excluid|cestino|bin$",
+        "trash",
+    ),
     (r"archive|archivo|arxiu|archiv|arquivo|archivio|all mail", "archive"),
 ]
 
@@ -127,9 +146,7 @@ def build_search_criteria(
 
 
 def _needs_utf8(criteria: list) -> bool:
-    return any(
-        isinstance(item, str) and not item.isascii() for item in criteria
-    )
+    return any(isinstance(item, str) and not item.isascii() for item in criteria)
 
 
 class ImapBackend:
@@ -143,6 +160,8 @@ class ImapBackend:
     # -- connection ------------------------------------------------------
     def _connect(self) -> IMAPClient:
         profile = self._account.profile
+        if profile.host is None:
+            raise ValueError(f"Account {self._account.name!r} has no host configured.")
         log.debug("connecting to %s:%s", profile.host, profile.port)
         try:
             client = IMAPClient(profile.host, port=profile.port, ssl=profile.ssl)
@@ -204,9 +223,7 @@ class ImapBackend:
             role = folder_role(flags, name)
             messages = unseen = None
             try:
-                status = self._retry(
-                    self.client.folder_status, name, [b"MESSAGES", b"UNSEEN"]
-                )
+                status = self._retry(self.client.folder_status, name, [b"MESSAGES", b"UNSEEN"])
                 messages = status.get(b"MESSAGES")
                 unseen = status.get(b"UNSEEN")
             except IMAPClientError:
@@ -224,7 +241,8 @@ class ImapBackend:
             if name.lower() == wanted.lower():
                 return name
         matches = [
-            name for flags, name in self._raw_folders()
+            name
+            for flags, name in self._raw_folders()
             if folder_role(flags, name) == wanted.lower()
         ]
         if matches:
@@ -268,19 +286,23 @@ class ImapBackend:
         handle = MessageHandle(
             account=self._account.name, folder=name, uidvalidity=uidvalidity, uid=uid
         )
-        return MessageSummary(
-            handle=handle.encode(),
-            subject=decode_header(env.subject) if env and env.subject else None,
-            from_=address_list(env.from_) if env else [],
-            to=address_list(env.to) if env else [],
-            date=to_datetime(env.date) if env else to_datetime(data.get(b"INTERNALDATE")),
-            seen=b"\\seen" in flags,
-            flagged=b"\\flagged" in flags,
-            answered=b"\\answered" in flags,
-            has_attachments=any(p.is_attachment for p in parts),
-            size=data.get(b"RFC822.SIZE"),
-            message_id=decode_header(env.message_id) if env and env.message_id else None,
-        )
+        # MessageSummary.from_ is aliased to "from" (a Python keyword), so pyright's
+        # synthesized __init__ only accepts the alias as a keyword; go through a
+        # dict to populate the field by its real name instead.
+        fields = {
+            "handle": handle.encode(),
+            "subject": decode_header(env.subject) if env and env.subject else None,
+            "from_": address_list(env.from_) if env else [],
+            "to": address_list(env.to) if env else [],
+            "date": to_datetime(env.date) if env else to_datetime(data.get(b"INTERNALDATE")),
+            "seen": b"\\seen" in flags,
+            "flagged": b"\\flagged" in flags,
+            "answered": b"\\answered" in flags,
+            "has_attachments": any(p.is_attachment for p in parts),
+            "size": data.get(b"RFC822.SIZE"),
+            "message_id": decode_header(env.message_id) if env and env.message_id else None,
+        }
+        return MessageSummary(**fields)
 
     def _page(self, folder: str, criteria: list, limit: int, offset: int) -> list[MessageSummary]:
         uidvalidity = self._select(folder)
@@ -345,12 +367,12 @@ class ImapBackend:
             )
         return parsed
 
-    def _body_text(self, uid: int, part, body_format: str) -> str:
+    def _body_text(self, uid: int, part, body_format: BodyFormat) -> str:
         """Fetch one candidate part and render it, or "" if it holds no text."""
         # PEEK so that reading a message never marks it as read.
         key = f"BODY.PEEK[{part.part_id}]".encode()
         fetched = self._retry(self.client.fetch, [uid], [key]).get(uid, {})
-        raw = fetched.get(f"BODY[{part.part_id}]".encode()) or b""
+        raw = cast(bytes, fetched.get(f"BODY[{part.part_id}]".encode()) or b"")
         if not raw:
             log.debug("uid %s: server returned no data for part %s", uid, part.part_id)
             return ""
@@ -373,7 +395,7 @@ class ImapBackend:
             raise ValueError("Message no longer exists in that folder.")
 
         summary = self._summary(parsed.folder, parsed.uidvalidity, uid, meta)
-        env = meta.get(b"ENVELOPE")
+        env = cast("Envelope | None", meta.get(b"ENVELOPE"))
         parts = walk_bodystructure(meta[b"BODYSTRUCTURE"]) if meta.get(b"BODYSTRUCTURE") else []
         candidates = body_candidates(parts)
 
@@ -397,7 +419,8 @@ class ImapBackend:
             if candidates:
                 log.warning(
                     "uid %s: every text part is empty (%s); returning an empty body",
-                    uid, ", ".join(f"{p.part_id} {p.content_type}" for p, _ in candidates),
+                    uid,
+                    ", ".join(f"{p.part_id} {p.content_type}" for p, _ in candidates),
                 )
 
         body, truncated = truncate(body, max_chars)
@@ -426,11 +449,11 @@ class ImapBackend:
 
         key = f"BODY.PEEK[{part_id}]".encode()
         fetched = self._retry(self.client.fetch, [uid], [key]).get(uid, {})
-        raw = fetched.get(f"BODY[{part_id}]".encode()) or b""
+        raw = cast(bytes, fetched.get(f"BODY[{part_id}]".encode()) or b"")
 
-        from base64 import b64decode
         import binascii
         import quopri
+        from base64 import b64decode
 
         encoding = (match.encoding or "").lower()
         try:

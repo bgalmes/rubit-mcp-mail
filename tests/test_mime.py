@@ -4,10 +4,10 @@ from rubit_mcp_mail.mime import (
     attachments_from,
     body_candidates,
     decode_body,
+    decode_header,
     normalize_spacing,
     truncate,
     walk_bodystructure,
-    decode_header,
 )
 
 
@@ -26,12 +26,48 @@ def ranked(struct):
     """The (part id, format) shortlist read_message will work down."""
     return [(p.part_id, fmt) for p, fmt in body_candidates(walk_bodystructure(struct))]
 
-TEXT_PART = (b"TEXT", b"PLAIN", (b"CHARSET", b"utf-8"), None, None, b"7BIT", 100, 5,
-             None, None, None, None)
-HTML_PART = (b"TEXT", b"HTML", (b"CHARSET", b"utf-8"), None, None, b"QUOTED-PRINTABLE",
-             300, 10, None, None, None, None)
-PDF_PART = (b"APPLICATION", b"PDF", (b"NAME", b"report.pdf"), None, None, b"BASE64",
-            40000, None, (b"attachment", (b"FILENAME", b"report.pdf")), None, None)
+
+TEXT_PART = (
+    b"TEXT",
+    b"PLAIN",
+    (b"CHARSET", b"utf-8"),
+    None,
+    None,
+    b"7BIT",
+    100,
+    5,
+    None,
+    None,
+    None,
+    None,
+)
+HTML_PART = (
+    b"TEXT",
+    b"HTML",
+    (b"CHARSET", b"utf-8"),
+    None,
+    None,
+    b"QUOTED-PRINTABLE",
+    300,
+    10,
+    None,
+    None,
+    None,
+    None,
+)
+PDF_PART = (
+    b"APPLICATION",
+    b"PDF",
+    (b"NAME", b"report.pdf"),
+    None,
+    None,
+    b"BASE64",
+    40000,
+    None,
+    (b"attachment", (b"FILENAME", b"report.pdf")),
+    None,
+    None,
+)
 
 ALTERNATIVE = ([TEXT_PART, HTML_PART], b"ALTERNATIVE", (b"BOUNDARY", b"x1"), None, None, None)
 MIXED = ([ALTERNATIVE, PDF_PART], b"MIXED", (b"BOUNDARY", b"x0"), None, None, None)
@@ -78,8 +114,20 @@ class TestBodySelection:
 
     def test_empty_plain_part_is_not_a_candidate(self):
         """The newsletter case: a 0-byte plain leg must not shadow the html one."""
-        empty = (b"TEXT", b"PLAIN", (b"CHARSET", b"utf-8"), None, None, b"7BIT", 0, 1,
-                 None, None, None, None)
+        empty = (
+            b"TEXT",
+            b"PLAIN",
+            (b"CHARSET", b"utf-8"),
+            None,
+            None,
+            b"7BIT",
+            0,
+            1,
+            None,
+            None,
+            None,
+            None,
+        )
         struct = ([empty, HTML_PART], b"ALTERNATIVE", (b"BOUNDARY", b"b"), None, None, None)
         assert ranked(struct) == [("2", "html-converted")]
 
@@ -89,14 +137,38 @@ class TestBodySelection:
 
     def test_text_attachment_is_not_used_as_the_body(self):
         """A .txt attachment must not be shown instead of the real body."""
-        txt = (b"TEXT", b"PLAIN", (b"NAME", b"log.txt"), None, None, b"7BIT", 9, 1,
-               None, (b"attachment", (b"FILENAME", b"log.txt")), None, None)
+        txt = (
+            b"TEXT",
+            b"PLAIN",
+            (b"NAME", b"log.txt"),
+            None,
+            None,
+            b"7BIT",
+            9,
+            1,
+            None,
+            (b"attachment", (b"FILENAME", b"log.txt")),
+            None,
+            None,
+        )
         struct = ([txt, HTML_PART], b"MIXED", (b"BOUNDARY", b"b"), None, None, None)
         assert ranked(struct) == [("2", "html-converted")]
 
     def test_unusual_text_subtype_beats_showing_nothing(self):
-        md = (b"TEXT", b"MARKDOWN", (b"CHARSET", b"utf-8"), None, None, b"7BIT", 40, 3,
-              None, None, None, None)
+        md = (
+            b"TEXT",
+            b"MARKDOWN",
+            (b"CHARSET", b"utf-8"),
+            None,
+            None,
+            b"7BIT",
+            40,
+            3,
+            None,
+            None,
+            None,
+            None,
+        )
         struct = ([md, PDF_PART], b"MIXED", (b"BOUNDARY", b"b"), None, None, None)
         assert ranked(struct) == [("1", "text")]
 
@@ -104,29 +176,77 @@ class TestBodySelection:
 class TestDecoding:
     def test_base64(self):
         part = walk_bodystructure(
-            (b"TEXT", b"PLAIN", (b"CHARSET", b"utf-8"), None, None, b"BASE64", 8, 1,
-             None, None, None, None)
+            (
+                b"TEXT",
+                b"PLAIN",
+                (b"CHARSET", b"utf-8"),
+                None,
+                None,
+                b"BASE64",
+                8,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
         )[0]
         assert decode_body(b"aGVsbG8gd29ybGQ=", part) == "hello world"
 
     def test_quoted_printable_and_charset(self):
         part = walk_bodystructure(
-            (b"TEXT", b"PLAIN", (b"CHARSET", b"iso-8859-1"), None, None,
-             b"QUOTED-PRINTABLE", 8, 1, None, None, None, None)
+            (
+                b"TEXT",
+                b"PLAIN",
+                (b"CHARSET", b"iso-8859-1"),
+                None,
+                None,
+                b"QUOTED-PRINTABLE",
+                8,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
         )[0]
         assert decode_body(b"caf=E9", part) == "café"
 
     def test_unknown_charset_does_not_raise(self):
         part = walk_bodystructure(
-            (b"TEXT", b"PLAIN", (b"CHARSET", b"x-nonsense"), None, None, b"7BIT", 2, 1,
-             None, None, None, None)
+            (
+                b"TEXT",
+                b"PLAIN",
+                (b"CHARSET", b"x-nonsense"),
+                None,
+                None,
+                b"7BIT",
+                2,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
         )[0]
         assert decode_body(b"hi", part) == "hi"
 
     def test_malformed_base64_falls_back_to_raw(self):
         part = walk_bodystructure(
-            (b"TEXT", b"PLAIN", (b"CHARSET", b"utf-8"), None, None, b"BASE64", 3, 1,
-             None, None, None, None)
+            (
+                b"TEXT",
+                b"PLAIN",
+                (b"CHARSET", b"utf-8"),
+                None,
+                None,
+                b"BASE64",
+                3,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
         )[0]
         assert decode_body(b"!!!not base64!!!", part)
 
@@ -136,8 +256,19 @@ class TestDecoding:
 
     def test_encoded_attachment_filename(self):
         part = walk_bodystructure(
-            (b"APPLICATION", b"PDF", (b"NAME", b"=?utf-8?B?ZmFjdHVyYS5wZGY=?="), None, None,
-             b"BASE64", 10, None, None, None, None)
+            (
+                b"APPLICATION",
+                b"PDF",
+                (b"NAME", b"=?utf-8?B?ZmFjdHVyYS5wZGY=?="),
+                None,
+                None,
+                b"BASE64",
+                10,
+                None,
+                None,
+                None,
+                None,
+            )
         )[0]
         assert part.filename == "factura.pdf"
 
@@ -163,18 +294,22 @@ class TestRealServerShapes:
         The children of a top-level multipart/alternative are parts 1 and 2. The
         walker used to report them as 1.1 and 1.2, so BODY[1.1] fetched NIL.
         """
-        raw = (b'(("text" "plain" ("charset" "utf-8") NIL NIL "quoted-printable" '
-               b'13828 457 NIL NIL NIL NIL)("text" "html" ("charset" "utf-8") NIL '
-               b'NIL "quoted-printable" 64061 1462 NIL NIL NIL NIL) "alternative" '
-               b'("boundary" "w1-U3dKo") NIL NIL)')
+        raw = (
+            b'(("text" "plain" ("charset" "utf-8") NIL NIL "quoted-printable" '
+            b'13828 457 NIL NIL NIL NIL)("text" "html" ("charset" "utf-8") NIL '
+            b'NIL "quoted-printable" 64061 1462 NIL NIL NIL NIL) "alternative" '
+            b'("boundary" "w1-U3dKo") NIL NIL)'
+        )
         assert ids_for(raw) == [("1", "text/plain"), ("2", "text/html")]
 
     def test_alternative_nested_in_mixed(self):
-        raw = (b'((("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 10 1 NIL NIL '
-               b'NIL NIL)("text" "html" ("charset" "utf-8") NIL NIL "7bit" 20 1 NIL '
-               b'NIL NIL NIL) "alternative" NIL NIL NIL)("application" "pdf" '
-               b'("name" "sponsor.pdf") NIL NIL "base64" 100 NIL ("attachment" '
-               b'("filename" "sponsor.pdf")) NIL NIL) "mixed" NIL NIL NIL)')
+        raw = (
+            b'((("text" "plain" ("charset" "utf-8") NIL NIL "7bit" 10 1 NIL NIL '
+            b'NIL NIL)("text" "html" ("charset" "utf-8") NIL NIL "7bit" 20 1 NIL '
+            b'NIL NIL NIL) "alternative" NIL NIL NIL)("application" "pdf" '
+            b'("name" "sponsor.pdf") NIL NIL "base64" 100 NIL ("attachment" '
+            b'("filename" "sponsor.pdf")) NIL NIL) "mixed" NIL NIL NIL)'
+        )
         assert ids_for(raw) == [
             ("1.1", "text/plain"),
             ("1.2", "text/html"),
@@ -207,7 +342,9 @@ class TestNormalizeSpacing:
 class TestTruncateKeepsReferences:
     def _doc(self, paragraphs=40):
         body = "\n\n".join(f"Headline [{i}] and some prose here." for i in range(1, paragraphs))
-        refs = "\n".join(f"   [{i}]: https://example.com/{'x' * 60}/{i}" for i in range(1, paragraphs))
+        refs = "\n".join(
+            f"   [{i}]: https://example.com/{'x' * 60}/{i}" for i in range(1, paragraphs)
+        )
         return body + "\n\n" + refs
 
     def test_referenced_targets_survive_the_cut(self):

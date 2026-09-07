@@ -17,6 +17,7 @@ class TestApplyOverrides:
             get_profile("outlook"),
             {"oauth": {"authority": "https://login.example.net/common", "scopes": ["s"]}},
         )
+        assert profile.oauth is not None
         assert profile.oauth.authority == "https://login.example.net/common"
         assert profile.oauth.scopes == ["s"]
 
@@ -24,6 +25,7 @@ class TestApplyOverrides:
         base = get_profile("outlook")
         profile = apply_overrides(base, {"host": "x.example.net"})
         assert profile.port == base.port
+        assert profile.oauth is not None and base.oauth is not None
         assert profile.oauth.authority == base.oauth.authority
 
     def test_unknown_top_level_key_raises(self):
@@ -42,4 +44,6 @@ class TestApplyOverrides:
         base = get_profile("outlook")
         apply_overrides(base, {"host": "x.example.net", "oauth": {"authority": "y"}})
         assert PROFILES["outlook"].host == "outlook.office365.com"
-        assert PROFILES["outlook"].oauth.authority == "https://login.microsoftonline.com/common"
+        outlook_oauth = PROFILES["outlook"].oauth
+        assert outlook_oauth is not None
+        assert outlook_oauth.authority == "https://login.microsoftonline.com/common"

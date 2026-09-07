@@ -16,7 +16,7 @@ from base64 import b64decode
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from .models import Attachment, EmailAddress
+from .models import Attachment, BodyFormat, EmailAddress
 
 log = logging.getLogger(__name__)
 
@@ -63,10 +63,7 @@ def _params(raw) -> dict[str, str]:
     if not raw:
         return {}
     items = list(raw)
-    return {
-        _s(items[i]).lower(): _s(items[i + 1])
-        for i in range(0, len(items) - 1, 2)
-    }
+    return {_s(items[i]).lower(): _s(items[i + 1]) for i in range(0, len(items) - 1, 2)}
 
 
 def _is_multipart(node) -> bool:
@@ -146,7 +143,7 @@ def walk_bodystructure(node, prefix: str = "") -> list[Part]:
     ]
 
 
-def body_candidates(parts: list[Part]) -> list[tuple[Part, str]]:
+def body_candidates(parts: list[Part]) -> list[tuple[Part, BodyFormat]]:
     """Rank the parts worth showing as the body, best first.
 
     text/plain outranks text/html, but only as a preference: an HTML newsletter
@@ -157,11 +154,15 @@ def body_candidates(parts: list[Part]) -> list[tuple[Part, str]]:
     """
     text_parts = [p for p in parts if p.maintype == "text" and not p.is_attachment]
     usable = [p for p in text_parts if p.size != 0]
-    ranked = [(p, "text") for p in usable if p.subtype == "plain"]
-    ranked += [(p, "html-converted") for p in usable if p.subtype == "html"]
+    plain: list[tuple[Part, BodyFormat]] = [(p, "text") for p in usable if p.subtype == "plain"]
+    html: list[tuple[Part, BodyFormat]] = [
+        (p, "html-converted") for p in usable if p.subtype == "html"
+    ]
     # Any other text/* subtype (markdown, calendar) beats showing nothing.
-    ranked += [(p, "text") for p in usable if p.subtype not in ("plain", "html")]
-    return ranked
+    other: list[tuple[Part, BodyFormat]] = [
+        (p, "text") for p in usable if p.subtype not in ("plain", "html")
+    ]
+    return plain + html + other
 
 
 def attachments_from(parts: list[Part]) -> list[Attachment]:
@@ -191,7 +192,9 @@ def decode_body(raw: bytes, part: Part) -> str:
         # returning mangled text is how an empty body becomes a mystery.
         log.warning(
             "part %s: could not undo %s encoding (%s); using the raw bytes",
-            part.part_id, encoding, exc,
+            part.part_id,
+            encoding,
+            exc,
         )
 
     charset = part.params.get("charset") or "utf-8"
@@ -289,9 +292,7 @@ def truncate(text: str, max_chars: int) -> tuple[str, bool]:
     # "[7]" marker pointing at nothing. Reserve room for the ones still cited.
     reserve = max_chars * _REF_BUDGET_SHARE // 100
     kept = prose[: max(max_chars - len(_TRUNCATED) - reserve, 0)].rstrip()
-    cited = sorted(
-        (n for n in refs if re.search(rf"\[{n}\]", kept)), key=int
-    )
+    cited = sorted((n for n in refs if re.search(rf"\[{n}\]", kept)), key=int)
 
     out = kept + _TRUNCATED
     tail = []

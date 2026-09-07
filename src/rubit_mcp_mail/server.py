@@ -136,9 +136,13 @@ def search_messages(
     from_: Annotated[
         str | None, Field(default=None, description="Substring of the sender address or name.")
     ] = None,
-    subject: Annotated[str | None, Field(default=None, description="Substring of the subject.")] = None,
+    subject: Annotated[
+        str | None, Field(default=None, description="Substring of the subject.")
+    ] = None,
     since: Annotated[date | None, Field(default=None, description="On or after this date.")] = None,
-    before: Annotated[date | None, Field(default=None, description="Strictly before this date.")] = None,
+    before: Annotated[
+        date | None, Field(default=None, description="Strictly before this date.")
+    ] = None,
     unread_only: Annotated[bool, Field(default=False, description="Only unread mail.")] = False,
     limit: LimitArg = 25,
     offset: OffsetArg = 0,
@@ -289,8 +293,12 @@ def _log_startup() -> None:
             # someone has actually asked for debug output.
             if log.isEnabledFor(logging.DEBUG):
                 state, detail = strategy.status()
-                log.debug("account %s auth status: %s%s", account.name, state,
-                          f" - {detail}" if detail else "")
+                log.debug(
+                    "account %s auth status: %s%s",
+                    account.name,
+                    state,
+                    f" - {detail}" if detail else "",
+                )
         except Exception as exc:  # noqa: BLE001
             log.warning("account %s: could not check credentials: %s", account.name, exc)
 

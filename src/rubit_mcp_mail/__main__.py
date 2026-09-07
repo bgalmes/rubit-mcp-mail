@@ -15,7 +15,7 @@ from .config import config_path, load_config
 from .secrets import SecretStore
 from .session import Session
 
-CONFIG_TEMPLATE = '''# ~/.config/rubit-mcp-mail/config.toml
+CONFIG_TEMPLATE = """# ~/.config/rubit-mcp-mail/config.toml
 download_dir = "~/Downloads/rubit-mcp-mail"
 
 [accounts.outlook]
@@ -28,7 +28,7 @@ client_id = "<Application (client) ID from your Azure app registration>"
 # provider = "generic"
 # email    = "you@fastmail.com"
 # host     = "imap.fastmail.com"
-'''
+"""
 
 
 def cmd_serve(_args: argparse.Namespace) -> int:

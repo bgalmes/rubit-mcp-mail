@@ -15,11 +15,14 @@ IMAPClient's own shape, so these tests exercise the path production does.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import pytest
-
 from eml import store_entry
 from fake_imap import FakeIMAPClient
+from imapclient import IMAPClient
+
+from rubit_mcp_mail.auth.base import AuthStrategy
 from rubit_mcp_mail.backends.imap import ImapBackend
 from rubit_mcp_mail.config import Account
 from rubit_mcp_mail.mime import (
@@ -34,10 +37,11 @@ FOLDERS = [([rb"\HasNoChildren"], b"/", "INBOX")]
 def backend_for(*fixtures: str):
     messages = {"INBOX": {i: store_entry(name) for i, name in enumerate(fixtures, start=1)}}
     fake = FakeIMAPClient(FOLDERS, messages)
-    account = Account(name="test", provider="generic", email="me@outlook.com",
-                      host="imap.test.invalid")
-    backend = ImapBackend(account, auth=object())
-    backend._client = fake
+    account = Account(
+        name="test", provider="generic", email="me@outlook.com", host="imap.test.invalid"
+    )
+    backend = ImapBackend(account, auth=cast(AuthStrategy, object()))
+    backend._client = cast(IMAPClient, fake)
     return backend, fake
 
 
@@ -81,7 +85,10 @@ class TestHtmlOnlyNewsletters:
         """The fallback adds a fetch; it must not be the kind that sets \\Seen."""
         _, fake = read("plain_placeholder.eml")
         body_fetches = [
-            k for c in fake.calls if c[0] == "fetch" for k in c[2]
+            k
+            for c in fake.calls
+            if c[0] == "fetch"
+            for k in c[2]
             if k.startswith("BODY[") or k.startswith("BODY.PEEK[")
         ]
         # Both legs get read: the empty plain one, then the html fallback.
@@ -120,9 +127,7 @@ class TestTruncationAfterFallback:
 class TestCandidateRanking:
     def test_zero_sized_plain_is_dropped(self):
         parts = walk_bodystructure(store_entry("html_only_newsletter.eml")[b"BODYSTRUCTURE"])
-        assert [(p.part_id, fmt) for p, fmt in body_candidates(parts)] == [
-            ("2", "html-converted")
-        ]
+        assert [(p.part_id, fmt) for p, fmt in body_candidates(parts)] == [("2", "html-converted")]
 
     def test_plain_still_outranks_html_when_it_has_content(self):
         parts = walk_bodystructure(store_entry("plain_placeholder.eml")[b"BODYSTRUCTURE"])
@@ -138,7 +143,6 @@ class TestTerseReplies:
         msg, _ = read("terse_reply.eml")
         assert msg.body_format == "text"
         assert msg.body == "Mira esto: https://example.com/menu\n\nQue te parece?"
-
 
 
 class TestAttachmentPartIds:
@@ -187,8 +191,20 @@ class TestFailuresAreLogged:
         from rubit_mcp_mail.mime import decode_body
 
         part = walk_bodystructure(
-            (b"TEXT", b"PLAIN", (b"CHARSET", b"utf-8"), None, None, b"QUOTED-PRINTABLE",
-             5, 1, None, None, None, None)
+            (
+                b"TEXT",
+                b"PLAIN",
+                (b"CHARSET", b"utf-8"),
+                None,
+                None,
+                b"QUOTED-PRINTABLE",
+                5,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
         )[0]
         with caplog.at_level(logging.INFO):
             assert decode_body(b"caf=C3=A9", part) == "café"
@@ -198,8 +214,20 @@ class TestFailuresAreLogged:
         from rubit_mcp_mail.mime import decode_body
 
         part = walk_bodystructure(
-            (b"TEXT", b"PLAIN", (b"CHARSET", b"x-nonsense"), None, None, b"7BIT",
-             2, 1, None, None, None, None)
+            (
+                b"TEXT",
+                b"PLAIN",
+                (b"CHARSET", b"x-nonsense"),
+                None,
+                None,
+                b"7BIT",
+                2,
+                1,
+                None,
+                None,
+                None,
+                None,
+            )
         )[0]
         with caplog.at_level(logging.INFO):
             assert decode_body(b"hi", part) == "hi"
@@ -207,8 +235,13 @@ class TestFailuresAreLogged:
 
 
 @pytest.mark.parametrize(
-    "fixture", ["html_only_newsletter.eml", "plain_placeholder.eml",
-                "html_only_with_attachment.eml", "terse_reply.eml"]
+    "fixture",
+    [
+        "html_only_newsletter.eml",
+        "plain_placeholder.eml",
+        "html_only_with_attachment.eml",
+        "terse_reply.eml",
+    ],
 )
 def test_no_fixture_reads_back_empty(fixture):
     """The blanket invariant the bug violated."""

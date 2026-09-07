@@ -48,21 +48,17 @@ def test_missing_dbus_is_named_as_the_reason(tmp_path, monkeypatch):
 
 
 def test_auth_status_explains_an_unreachable_keyring(file_store):
-    account = Account(
-        name="outlook", provider="outlook", email="you@outlook.com", client_id="cid"
-    )
+    account = Account(name="outlook", provider="outlook", email="you@outlook.com", client_id="cid")
     state, detail = MicrosoftDeviceCodeAuth(account, file_store).status()
 
     assert state == "needs_auth"
     # Not just "no cached token": it has to say where it looked and why there.
-    assert str(file_store._path) in detail
-    assert "RUBIT_MCP_MAIL_NO_KEYRING" in detail
+    assert str(file_store._path) in (detail or "")
+    assert "RUBIT_MCP_MAIL_NO_KEYRING" in (detail or "")
 
 
 def test_auth_status_ok_path_is_unaffected(file_store, monkeypatch):
-    account = Account(
-        name="outlook", provider="outlook", email="you@outlook.com", client_id="cid"
-    )
+    account = Account(name="outlook", provider="outlook", email="you@outlook.com", client_id="cid")
     strategy = MicrosoftDeviceCodeAuth(account, file_store)
     file_store.set(strategy.secret_key, "{}")
     monkeypatch.setattr(
