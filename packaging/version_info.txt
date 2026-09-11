@@ -1,0 +1,38 @@
+# PyInstaller Windows version resource. Ignored on other platforms.
+#
+# Gives both executables a real product name, description and version instead
+# of no metadata at all - anonymous-looking binaries are more likely to be
+# flagged by heuristic antivirus scanners. Not a substitute for code-signing,
+# which is the durable fix and tracked separately.
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(0, 1, 0, 0),
+    prodvers=(0, 1, 0, 0),
+    mask=0x3F,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0),
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          "040904B0",
+          [
+            StringStruct("CompanyName", "rubit-mcp-mail"),
+            StringStruct("FileDescription", "rubit-mcp-mail - read-only mail MCP server"),
+            StringStruct("FileVersion", "0.1.0"),
+            StringStruct("InternalName", "rubit-mcp-mail"),
+            StringStruct("LegalCopyright", "rubit-mcp-mail contributors"),
+            StringStruct("OriginalFilename", "rubit-mcp-mail"),
+            StringStruct("ProductName", "rubit-mcp-mail"),
+            StringStruct("ProductVersion", "0.1.0"),
+          ],
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct("Translation", [0, 1200])]),
+  ],
+)

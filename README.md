@@ -11,23 +11,34 @@ asserts none are ever added.
 
 ## Quick install
 
-Download the installer for your system from the
-[latest release](https://github.com/bgalmes/rubit-mcp-mail/releases/latest) and
-run it:
+Download and extract the archive for your system from the
+[latest release](https://github.com/bgalmes/rubit-mcp-mail/releases/latest), then
+run the setup program inside it:
 
-| System | File |
-| --- | --- |
-| Windows | `rubit-mcp-mail-setup-windows.exe` |
-| Linux | `rubit-mcp-mail-setup-linux` — `chmod +x` it first |
+| System | File | Run |
+| --- | --- | --- |
+| Windows | `rubit-mcp-mail-windows.zip` | extract it, then `rubit-mcp-mail-setup.exe` |
+| Linux | `rubit-mcp-mail-linux.tar.gz` | extract it, then `chmod +x` and run `rubit-mcp-mail-setup` |
 
 Nothing needs to be installed beforehand: Python and every dependency are inside
-that one file. A window asks for your provider and email address, signs you in,
+the archive. A window asks for your provider and email address, signs you in,
 and registers the mail server with Claude Desktop and Claude Code if it finds
-them — restart Claude Desktop afterwards and your mail is there.
+them — restart Claude Desktop afterwards and your mail is there. Keep the
+extracted folder around, or not — setup copies what it needs to a permanent
+location before it's done, so the download itself can be deleted afterwards.
 
 Run it again whenever you want to add a second mailbox or repair a sign-in; it
 updates what is already configured rather than replacing it. On a machine with
-no desktop (over SSH, say) the same file walks you through it in the terminal.
+no desktop (over SSH, say) the same program walks you through it in the terminal.
+
+**A note on antivirus warnings.** Windows Defender or Avast may flag the `.exe`
+files inside the archive. This is a known false positive common to unsigned
+PyInstaller-built applications — an antivirus heuristic reacting to the pattern
+of a bundled Python runtime, not anything this project's code actually does.
+Proper code-signing is the durable fix and is tracked as a follow-up, not done
+yet. In the meantime: report it to your antivirus vendor as a false positive
+(Avast has a submission form for this), or build from source using the
+instructions below and compare against what's published here.
 
 Everything below is the manual setup that installer automates — read on if you
 want to run from source or something needs fixing by hand.
@@ -384,20 +395,26 @@ API instead implements the `MailBackend` protocol in
 ### Building the installers
 
 `.github/workflows/release.yml` builds them for Windows and Linux and attaches
-them to every published release. The same two steps build one locally — the
-server executable first, then the installer that carries it:
+them to every published release. Same command locally, from `packaging/rubit-mcp-mail.spec`:
 
 ```bash
 ./.venv/bin/python -m pip install -e ".[build]"
-./.venv/bin/pyinstaller --onefile --name rubit-mcp-mail packaging/cli_entry.py
-./.venv/bin/pyinstaller --onefile --windowed --name rubit-mcp-mail-setup \
-  --add-binary "dist/rubit-mcp-mail:." packaging/setup_entry.py
+./.venv/bin/pyinstaller packaging/rubit-mcp-mail.spec
 ```
 
-On Windows the `--add-binary` separator is `;` rather than `:`. The wizard
-unpacks the server executable into `~/.local/share/rubit-mcp-mail/bin`
-(`%LOCALAPPDATA%\Programs\rubit-mcp-mail` on Windows) and registers that path,
-so the installer itself can be deleted afterwards.
+This produces one folder, `dist/rubit-mcp-mail/`, containing both executables
+(`rubit-mcp-mail`, the server; `rubit-mcp-mail-setup`, the wizard) sharing one
+copy of the Python runtime and its dependencies — see the spec file's own
+comment for why that matters (an earlier version built them as two independent
+onefile executables, and the installer ended up embedding a full second copy
+of the server's own runtime as a data blob). That's also why the release asset
+is an archive of the whole folder rather than a single `.exe`: the two
+executables can't share anything once split back apart into separate files.
+
+The wizard finds the server executable as a plain sibling file next to itself
+and copies it — along with the `_internal` folder both executables depend on —
+into `~/.local/share/rubit-mcp-mail/bin` (`%LOCALAPPDATA%\Programs\rubit-mcp-mail`
+on Windows), so the downloaded archive can be deleted afterwards.
 
 ## Layout
 

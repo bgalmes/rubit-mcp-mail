@@ -92,31 +92,47 @@ def default_install_dir() -> Path:
 
 
 def bundled_server_binary() -> Path | None:
-    """The server executable packed inside the installer, when there is one."""
+    """The server executable installed alongside the running setup binary.
+
+    Built as a shared onedir bundle (see packaging/rubit-mcp-mail.spec), so
+    the server executable sits as a plain sibling file next to the setup
+    executable in the same output folder - unlike onefile, there is no
+    temp-extraction step (`sys._MEIPASS`) to look inside.
+    """
     if not is_frozen():
         return None
-    meipass = getattr(sys, "_MEIPASS", None)
-    if not meipass:
-        return None
-    candidate = Path(meipass) / SERVER_BINARY_NAME
+    candidate = Path(sys.executable).resolve().parent / SERVER_BINARY_NAME
     return candidate if candidate.exists() else None
 
 
 def install_server_binary(source: Path, target_dir: Path) -> Path:
-    """Copy the server executable into `target_dir` and make it runnable."""
+    """Copy the server executable - and its shared runtime, if any - into
+    `target_dir` and make it runnable.
+
+    A onedir server executable cannot run standalone without the `_internal`
+    library folder that sits next to it, so both are copied: the permanent
+    install must keep working after the downloaded installer is deleted.
+    Tests that pass a bare single-file `source` with no such folder still get
+    the old single-file behavior, since there is nothing to copy alongside it.
+    """
     target = target_dir / SERVER_BINARY_NAME
     if target.exists() and source.resolve() == target.resolve():
-        return target
+        return target  # already running from the permanent location
 
     target_dir.mkdir(parents=True, exist_ok=True)
     try:
         shutil.copyfile(source, target)
+        shared = source.parent / "_internal"
+        if shared.is_dir():
+            shutil.copytree(shared, target_dir / "_internal", dirs_exist_ok=True)
     except PermissionError as exc:
-        # Windows locks a running executable, so this is the "Claude is still
-        # running the old copy" case rather than anything the user did wrong.
+        # Windows locks a running executable's files, so this is the "Claude
+        # is still running the old copy" case rather than anything the user
+        # did wrong.
         raise PermissionError(
-            f"Could not replace {target} ({exc}). Quit Claude Desktop, which may "
-            "still be running the mail server, and run setup again."
+            f"Could not replace the files in {target_dir} ({exc}). Quit Claude "
+            "Desktop, which may still be running the mail server, and run "
+            "setup again."
         ) from None
     if os.name == "posix":
         target.chmod(0o755)

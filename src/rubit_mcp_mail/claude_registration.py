@@ -51,22 +51,59 @@ def register_claude_code(server_path: Path, *, name: str = SERVER_NAME) -> tuple
 
 
 # -- Claude Desktop ------------------------------------------------------
-def claude_desktop_config_path() -> Path:
-    """Where Claude Desktop keeps claude_desktop_config.json."""
+def _candidate_desktop_config_paths() -> list[Path]:
+    """Every place claude_desktop_config.json might live, most likely first.
+
+    On Windows, Claude Desktop can be either a classic unpackaged Electron
+    install (config under plain %APPDATA%\\Claude) or an MSIX-packaged one -
+    confirmed on a real machine to live under
+    %LOCALAPPDATA%\\Packages\\Claude_<publisher-hash>\\LocalCache\\Roaming\\Claude,
+    which is the standard Windows app-container redirection for a packaged
+    app's "roaming" data. The publisher-hash suffix is stable for a given
+    signing identity but not something to hardcode, hence the glob.
+    """
     if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-        return base / "Claude" / "claude_desktop_config.json"
+        candidates = []
+        local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        packages = local / "Packages"
+        if packages.is_dir():
+            # Glob the package directory itself, not the config file - a fresh
+            # install has the former before it ever has the latter.
+            candidates.extend(
+                pkg / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json"
+                for pkg in sorted(p for p in packages.glob("Claude_*") if p.is_dir())
+            )
+        appdata = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        candidates.append(appdata / "Claude" / "claude_desktop_config.json")
+        return candidates
+
     base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    return base / "Claude" / "claude_desktop_config.json"
+    return [base / "Claude" / "claude_desktop_config.json"]
+
+
+def claude_desktop_config_path() -> Path:
+    """Where Claude Desktop keeps claude_desktop_config.json.
+
+    Prefers whichever candidate location actually has the directory already
+    (existing install), falling back to the first - classic on Windows,
+    XDG-style on Linux - so a fresh registration still has somewhere sane to
+    write to.
+    """
+    candidates = _candidate_desktop_config_paths()
+    for candidate in candidates:
+        if candidate.parent.is_dir():
+            return candidate
+    return candidates[0]
 
 
 def claude_desktop_detected() -> bool:
     """Whether Claude Desktop looks installed.
 
-    The directory is created on first run, so its absence is a reasonable "not
-    installed"; the config file itself may legitimately not exist yet.
+    Each candidate's directory is created on first run, so its absence is a
+    reasonable "not installed" signal; the config file itself may legitimately
+    not exist yet even when the app is.
     """
-    return claude_desktop_config_path().parent.is_dir()
+    return any(candidate.parent.is_dir() for candidate in _candidate_desktop_config_paths())
 
 
 def desktop_entry(server_path: Path, *, needs_no_keyring: bool) -> dict:

@@ -27,6 +27,55 @@ class TestConfigPath:
         (tmp_path / "Claude").mkdir()
         assert cr.claude_desktop_detected()
 
+    def test_windows_finds_an_msix_packaged_install(self, monkeypatch, tmp_path):
+        # The exact directory shape confirmed on a real Windows machine: an
+        # MSIX-packaged Claude Desktop redirects its "roaming" data under
+        # LOCALAPPDATA\Packages\Claude_<publisher-hash>\LocalCache\Roaming\.
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+        monkeypatch.delenv("APPDATA", raising=False)
+        package_dir = (
+            tmp_path / "Packages" / "Claude_pzs8sxrjxfjjc" / "LocalCache" / "Roaming" / "Claude"
+        )
+        package_dir.mkdir(parents=True)
+        config = package_dir / "claude_desktop_config.json"
+        config.write_text("{}")
+
+        assert cr.claude_desktop_detected()
+        assert cr.claude_desktop_config_path() == config
+
+    def test_windows_finds_an_msix_install_before_the_config_file_exists(
+        self, monkeypatch, tmp_path
+    ):
+        # A fresh MSIX install may have the package directory but no config
+        # file yet - that must still count as "detected".
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+        monkeypatch.delenv("APPDATA", raising=False)
+        package_dir = (
+            tmp_path / "Packages" / "Claude_pzs8sxrjxfjjc" / "LocalCache" / "Roaming" / "Claude"
+        )
+        package_dir.mkdir(parents=True)
+
+        assert cr.claude_desktop_detected()
+
+    def test_windows_falls_back_to_the_classic_layout(self, monkeypatch, tmp_path):
+        # No Packages directory at all - an unpackaged (classic) installer.
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "does-not-exist"))
+        monkeypatch.setenv("APPDATA", str(tmp_path))
+        (tmp_path / "Claude").mkdir()
+
+        assert cr.claude_desktop_detected()
+        assert cr.claude_desktop_config_path() == tmp_path / "Claude" / "claude_desktop_config.json"
+
+    def test_windows_neither_layout_present_means_not_detected(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(sys, "platform", "win32")
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "does-not-exist"))
+        monkeypatch.setenv("APPDATA", str(tmp_path / "also-does-not-exist"))
+
+        assert not cr.claude_desktop_detected()
+
 
 class TestDesktopEntry:
     def test_no_env_block_when_the_keyring_works(self, monkeypatch):
