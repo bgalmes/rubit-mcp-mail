@@ -25,11 +25,13 @@ jobs:
           - os: ubuntu-latest
             label: Linux
             ext: ""
-            asset: rubit-mcp-mail-linux.tar.gz
+            sep: ":"
+            asset: rubit-mcp-mail-setup-linux
           - os: windows-latest
             label: Windows
             ext: ".exe"
-            asset: rubit-mcp-mail-windows.zip
+            sep: ";"
+            asset: rubit-mcp-mail-setup-windows.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -57,34 +59,43 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
-      # One shared onedir bundle for both executables - see the spec file's
-      # own comment for why: two independent --onefile builds used to mean
-      # the installer embedded a full second copy of the server binary's
-      # runtime as a data blob. MERGE() gives them one shared copy instead.
-      - name: Build the server and installer executables
-        run: pyinstaller --clean packaging/rubit-mcp-mail.spec
+      # Console build: this is what Claude launches and talks to over stdio.
+      # --version-file gives the binary a real product name/description
+      # instead of being completely anonymous - a small, free mitigation for
+      # antivirus heuristics reacting to unsigned binaries (not a fix for the
+      # underlying flag; see the README's antivirus note for the real one).
+      - name: Build the server executable
+        run: |
+          pyinstaller --onefile --clean --name rubit-mcp-mail \
+            --version-file packaging/version_info.txt \
+            packaging/cli_entry.py
 
       - name: Smoke-test the server executable
-        run: "dist/rubit-mcp-mail/rubit-mcp-mail${{ matrix.ext }} --help"
+        run: "dist/rubit-mcp-mail${{ matrix.ext }} --help"
 
       # A real MCP stdio handshake, not just --help: this is what would catch
-      # a module wrongly excluded from the frozen build (see the spec's
-      # comment on what turned out NOT to be safely excludable).
+      # a frozen build silently missing a runtime import that only breaks
+      # once the stdio transport actually runs.
       - name: Smoke-test the stdio transport with a real MCP handshake
         run: |
           echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
-            | "dist/rubit-mcp-mail/rubit-mcp-mail${{ matrix.ext }}" serve | grep -q '"protocolVersion"'
+            | "dist/rubit-mcp-mail${{ matrix.ext }}" serve | grep -q '"protocolVersion"'
         env:
           RUBIT_MCP_MAIL_NO_KEYRING: "1"
 
-      - name: Archive the bundle
+      # Windowed build, carrying the server executable above inside it: the
+      # wizard unpacks that into a permanent directory and registers its path,
+      # so the installer itself can be deleted afterwards.
+      - name: Build the installer
         run: |
-          cd dist/rubit-mcp-mail
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            zip -r "../../${{ matrix.asset }}" .
-          else
-            tar czf "../../${{ matrix.asset }}" .
-          fi
+          pyinstaller --onefile --clean --windowed \
+            --name rubit-mcp-mail-setup \
+            --version-file packaging/version_info.txt \
+            --add-binary "dist/rubit-mcp-mail${{ matrix.ext }}${{ matrix.sep }}." \
+            packaging/setup_entry.py
+
+      - name: Name the asset
+        run: mv "dist/rubit-mcp-mail-setup${{ matrix.ext }}" "${{ matrix.asset }}"
 
       - uses: actions/upload-artifact@v4
         with:

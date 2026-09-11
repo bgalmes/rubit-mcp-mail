@@ -7,5 +7,4 @@ secrets.json
 # PyInstaller output from building the installers locally
 build/
 dist/
-# packaging/rubit-mcp-mail.spec is hand-written and committed - it's the only
-# .spec file this project has, so nothing else needs a name-based ignore.
+*.spec

@@ -104,59 +104,6 @@ class TestInstallServerBinary:
         target = installer.install_server_binary(source, source.parent)
         assert target.read_bytes() == b"#!/bin/sh\necho hi\n"
 
-    def test_a_sibling_internal_folder_is_copied_too(self, tmp_path):
-        # A onedir server executable cannot run without the shared runtime
-        # folder that sits next to it in the build output.
-        source = self._source(tmp_path)
-        internal = source.parent / "_internal"
-        internal.mkdir()
-        (internal / "some.lib").write_bytes(b"native library bytes")
-
-        installer.install_server_binary(source, tmp_path / "bin")
-
-        assert (tmp_path / "bin" / "_internal" / "some.lib").read_bytes() == b"native library bytes"
-
-    def test_rerunning_updates_the_internal_folder_in_place(self, tmp_path):
-        source = self._source(tmp_path)
-        internal = source.parent / "_internal"
-        internal.mkdir()
-        (internal / "some.lib").write_bytes(b"old")
-        installer.install_server_binary(source, tmp_path / "bin")
-
-        (internal / "some.lib").write_bytes(b"new")
-        (internal / "extra.lib").write_bytes(b"added later")
-        installer.install_server_binary(source, tmp_path / "bin")
-
-        assert (tmp_path / "bin" / "_internal" / "some.lib").read_bytes() == b"new"
-        assert (tmp_path / "bin" / "_internal" / "extra.lib").read_bytes() == b"added later"
-
-    def test_no_internal_folder_is_fine(self, tmp_path):
-        # Plain single-file sources (as used by most of these tests, and by
-        # a non-onedir build) have nothing extra to copy alongside them.
-        target = installer.install_server_binary(self._source(tmp_path), tmp_path / "bin")
-        assert not (tmp_path / "bin" / "_internal").exists()
-        assert target.exists()
-
-
-class TestBundledServerBinary:
-    def test_none_when_not_frozen(self, monkeypatch):
-        monkeypatch.setattr(installer.sys, "frozen", False, raising=False)
-        assert installer.bundled_server_binary() is None
-
-    def test_finds_the_sibling_executable_when_frozen(self, monkeypatch, tmp_path):
-        sibling = tmp_path / installer.SERVER_BINARY_NAME
-        sibling.write_bytes(b"server")
-        monkeypatch.setattr(installer.sys, "frozen", True, raising=False)
-        monkeypatch.setattr(installer.sys, "executable", str(tmp_path / "rubit-mcp-mail-setup"))
-
-        assert installer.bundled_server_binary() == sibling
-
-    def test_none_when_the_sibling_does_not_exist(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(installer.sys, "frozen", True, raising=False)
-        monkeypatch.setattr(installer.sys, "executable", str(tmp_path / "rubit-mcp-mail-setup"))
-
-        assert installer.bundled_server_binary() is None
-
 
 class TestEnsureServerInstalled:
     def test_unpacks_the_bundled_binary_when_frozen(self, tmp_path, monkeypatch):
