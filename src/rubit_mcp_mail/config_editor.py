@@ -11,6 +11,10 @@ The web form posts one checkbox per (account, tool) pair, named
 `enabled__<account>__<tool>`, present in the body only when checked (standard
 HTML checkbox semantics). `apply_toggles` turns that into the new
 `disabled_tools` list per account.
+
+Write permissions (`allow_write` / `enabled_write_tools`) follow the same
+posted-form shape but are opt-in rather than opt-out - see
+`apply_write_toggles` and `write_write_permissions` below.
 """
 
 from __future__ import annotations
@@ -25,10 +29,12 @@ from pydantic import ValidationError
 from tomlkit import TOMLDocument
 
 from .config import Account, first_error, load_config
-from .permissions import TOOL_NAMES
+from .permissions import TOOL_NAMES, WRITE_TOOL_NAMES
 from .providers import PROFILES
 
 CHECKBOX_PREFIX = "enabled__"
+WRITE_PARENT_PREFIX = "write_allow__"
+WRITE_TOOL_PREFIX = "write_tool__"
 
 # An account name is both a TOML bare key and part of the SecretStore key, so
 # keep it to characters that need no quoting anywhere.
@@ -37,14 +43,23 @@ ACCOUNT_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 # not an attempt at RFC 5322.
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-# The account keys the GUI knows how to write. `disabled_tools` is deliberately
-# absent: it is owned by the permissions page and must survive an account edit.
+# The account keys the GUI knows how to write. `disabled_tools`, `allow_write`
+# and `enabled_write_tools` are deliberately absent: they are owned by the
+# permissions page and must survive an account edit.
 ACCOUNT_FIELDS = ("provider", "email", "client_id", "host", "port", "ssl")
 
 
 # -- permissions -------------------------------------------------------------
 def checkbox_name(account: str, tool: str) -> str:
     return f"{CHECKBOX_PREFIX}{account}__{tool}"
+
+
+def write_parent_checkbox_name(account: str) -> str:
+    return f"{WRITE_PARENT_PREFIX}{account}"
+
+
+def write_tool_checkbox_name(account: str, tool: str) -> str:
+    return f"{WRITE_TOOL_PREFIX}{account}__{tool}"
 
 
 def apply_toggles(accounts: list[str], posted: dict[str, list[str]]) -> dict[str, list[str]]:
@@ -77,6 +92,48 @@ def write_disabled_tools(path: Path, updates: dict[str, list[str]]) -> None:
             table["disabled_tools"] = sorted(disabled)
         else:
             table.pop("disabled_tools", None)
+    save_document(path, doc)
+
+
+def apply_write_toggles(
+    accounts: list[str], posted: dict[str, list[str]]
+) -> dict[str, tuple[bool, list[str]]]:
+    """Compute the new (allow_write, enabled_write_tools) per account.
+
+    Opt-in, unlike `apply_toggles`: a write tool is enabled only when its
+    checkbox is present in the posted form.
+    """
+    result: dict[str, tuple[bool, list[str]]] = {}
+    for account in accounts:
+        allow_write = write_parent_checkbox_name(account) in posted
+        enabled = sorted(
+            tool for tool in WRITE_TOOL_NAMES if write_tool_checkbox_name(account, tool) in posted
+        )
+        result[account] = (allow_write, enabled)
+    return result
+
+
+def write_write_permissions(path: Path, updates: dict[str, tuple[bool, list[str]]]) -> None:
+    """Update `allow_write`/`enabled_write_tools` for the given accounts.
+
+    Same preserve-everything-else approach as `write_disabled_tools`.
+    `allow_write` is omitted when False (its default) and
+    `enabled_write_tools` when empty.
+    """
+    doc = load_document(path)
+    accounts_table = doc.get("accounts")
+    for name, (allow_write, enabled) in updates.items():
+        if accounts_table is None or name not in accounts_table:
+            continue
+        table = accounts_table[name]
+        if allow_write:
+            table["allow_write"] = True
+        else:
+            table.pop("allow_write", None)
+        if enabled:
+            table["enabled_write_tools"] = enabled
+        else:
+            table.pop("enabled_write_tools", None)
     save_document(path, doc)
 
 

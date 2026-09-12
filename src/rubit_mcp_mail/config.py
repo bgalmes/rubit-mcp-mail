@@ -13,7 +13,7 @@ import tomlkit
 import tomllib
 from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_validator
 
-from .permissions import TOOL_NAMES
+from .permissions import TOOL_NAMES, WRITE_TOOL_NAMES
 from .providers import ImapProfile, apply_overrides, get_profile
 
 # What a freshly created config gets. Written in tilde form (load_config
@@ -33,6 +33,12 @@ class Account(BaseModel):
     ssl: bool | None = None
     # MCP tool names forbidden for this account (see permissions.TOOL_NAMES).
     disabled_tools: list[str] = Field(default_factory=list)
+    # Parent switch for write access. Must be True for any write tool to run,
+    # regardless of enabled_write_tools - see Account.can_write.
+    allow_write: bool = False
+    # MCP write tool names explicitly opted into for this account (see
+    # permissions.WRITE_TOOL_NAMES). Meaningless unless allow_write is True.
+    enabled_write_tools: list[str] = Field(default_factory=list)
     # Set by load_config() from the config's top-level [providers.*] tables;
     # empty for accounts built directly (e.g. in tests).
     _provider_overrides: dict = PrivateAttr(default_factory=dict)
@@ -55,7 +61,21 @@ class Account(BaseModel):
                 f"Account {self.name!r} has unknown tool(s) in disabled_tools: "
                 f"{', '.join(bad)}. Valid tool names: {', '.join(TOOL_NAMES)}"
             )
+        if bad := sorted(set(self.enabled_write_tools) - set(WRITE_TOOL_NAMES)):
+            raise ValueError(
+                f"Account {self.name!r} has unknown tool(s) in enabled_write_tools: "
+                f"{', '.join(bad)}. Valid tool names: {', '.join(WRITE_TOOL_NAMES)}"
+            )
         return self
+
+    def can_write(self, tool: str) -> bool:
+        """Whether `tool` (a name from permissions.WRITE_TOOL_NAMES) may run.
+
+        Requires both the parent `allow_write` switch and the tool's own
+        opt-in - the parent being off always wins, regardless of
+        enabled_write_tools.
+        """
+        return self.allow_write and tool in self.enabled_write_tools
 
     @property
     def profile(self) -> ImapProfile:

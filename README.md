@@ -1,13 +1,15 @@
 # rubit-mcp-mail
 
-A read-only MCP server for reading your mail. Provider-agnostic: it speaks IMAP,
-so it works with Outlook.com, Gmail, Fastmail, iCloud, or a self-hosted server —
-the provider is a line of config, not a code change.
+An MCP server for reading your mail. Provider-agnostic: it speaks IMAP, so it
+works with Outlook.com, Gmail, Fastmail, iCloud, or a self-hosted server — the
+provider is a line of config, not a code change.
 
-**Read-only by construction.** Folders are opened with `EXAMINE`, never `SELECT`,
+**Read-only by default.** Folders are opened with `EXAMINE`, never `SELECT`,
 and bodies are fetched with `BODY.PEEK`, so reading a message does not even mark
-it as read. There are no send, move, delete, or flag code paths, and a test
-asserts none are ever added.
+it as read. Two write actions exist - marking a message as read and moving it
+to another folder - but each is off unless explicitly turned on per account;
+see [Permissions](#permissions). There is no send, delete, or trash code path
+at all, and a test asserts none is ever added.
 
 ## Quick install
 
@@ -51,6 +53,8 @@ want to run from source or something needs fixing by hand.
 | `search_messages` | Server-side search by text, sender, subject, date range, unread |
 | `read_message` | Full headers, body text, attachment metadata |
 | `get_attachment` | Save one attachment into the download directory |
+| `mark_read` | Mark a message as read. **Off by default** — see [Permissions](#permissions) |
+| `move_message` | Move a message to another folder. **Off by default** — see [Permissions](#permissions) |
 
 Folders are addressed by **role** — `inbox`, `sent`, `drafts`, `junk`, `trash`,
 `archive` — so you never need to know that Outlook calls it `Junk Email` while
@@ -82,14 +86,33 @@ disabled_tools = ["get_attachment"]
 ```
 
 A blocked call returns a plain `Error: ...` string to the model rather than
-failing silently. This is meant for future write tools (send, mark as
-read/unread, etc.) that don't exist yet, but it works against today's
-read-only tools too — for example to keep attachments off a shared account.
+failing silently. This works against the read-only tools too — for example to
+keep attachments off a shared account.
+
+### Write access (`mark_read`, `move_message`)
+
+Write tools work the other way round: **off unless explicitly enabled**,
+rather than on unless disabled. Each account also has a parent switch,
+`allow_write`, that must be `true` before either write tool can run at all —
+turning it off disables both regardless of `enabled_write_tools`:
+
+```toml
+[accounts.personal]
+provider = "generic"
+email    = "you@fastmail.com"
+host     = "imap.fastmail.com"
+allow_write = true
+enabled_write_tools = ["mark_read"]   # move_message is still off
+```
+
+There is no delete or trash tool, and none is planned — this server can read
+and (optionally) reorganize mail, but it can never remove it.
 
 Rather than editing TOML by hand, run `rubit-mcp-mail permissions` — it opens
 [the GUI](#the-gui) directly on the permissions page, a grid of accounts and
 tools where unchecking a box and saving writes `disabled_tools` back into
-`config.toml`.
+`config.toml`. A separate "Write access" section on the same page covers the
+parent `allow_write` switch and the two write tools.
 
 **A `serve` process caches its config on first read**, so toggling a
 permission here does not affect a *running* MCP server (e.g. one launched by
@@ -118,7 +141,8 @@ It prints a URL (and opens your browser at it) with pages to:
   device-code flow for Outlook, without dropping to a terminal. Credentials go
   to the same keyring (or `0600` file) the CLI uses; the config file never
   holds a secret.
-- **Set the download directory** and the per-account tool permissions.
+- **Set the download directory** and the per-account tool permissions,
+  including the opt-in [write access](#write-access-mark_read-move_message).
 - **Edit provider overrides** — the `[providers.*]` tables described under
   [If Microsoft changes their endpoints](#if-microsoft-changes-their-endpoints),
   without writing TOML table syntax.
@@ -468,7 +492,7 @@ src/rubit_mcp_mail/
   session.py       wires config + auth + backend; attachment path safety
   config.py        TOML config -> Account models
   diagnostics.py   the doctor checks, as data (shared by the CLI and the GUI)
-  permissions.py   registry of per-account-toggleable tool names
+  permissions.py   registry of per-account-toggleable read and write tool names
   config_editor.py every write to config.toml: comment-preserving, validated
   webui.py         local web GUI: routing and access control
   webui_pages.py   local web GUI: HTML

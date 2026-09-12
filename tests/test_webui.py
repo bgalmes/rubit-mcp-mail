@@ -220,6 +220,25 @@ class TestAccountCrud:
         browser.post("/accounts/personal", form)
         assert load_config(env).account("personal").disabled_tools == ["read_message"]
 
+    def test_edit_leaves_write_permissions_alone(self, browser, env):
+        browser.post(
+            "/permissions",
+            {"write_allow__personal": "on", "write_tool__personal__mark_read": "on"},
+            follow=False,
+        )
+        browser.post(
+            "/accounts/personal",
+            {
+                "provider": "generic",
+                "email": "you@fastmail.com",
+                "host": "imap.fastmail.com",
+                "ssl": "",
+            },
+        )
+        account = load_config(env).account("personal")
+        assert account.allow_write is True
+        assert account.enabled_write_tools == ["mark_read"]
+
     def test_rejected_form_shows_the_error_and_writes_nothing(self, browser, env):
         original = env.read_text()
         status, body, _ = browser.post(
@@ -316,6 +335,43 @@ class TestPermissionsPage:
         page = browser.get("/permissions")[1]
         assert 'name="enabled__outlook__read_message"' in page
         assert 'name="enabled__outlook__read_message" checked' not in page
+
+    def test_write_tools_are_listed_and_unchecked_by_default(self, browser):
+        body = browser.get("/permissions")[1]
+        assert "Mark messages as read" in body
+        assert "Move messages to another folder" in body
+        assert 'name="write_tool__outlook__delete' not in body  # no delete/trash tool exists
+        assert 'name="write_allow__outlook" checked' not in body
+        assert 'name="write_tool__outlook__mark_read" checked' not in body
+
+    def test_enabling_write_access_persists_and_shows_in_the_next_get(self, browser, env):
+        fields = {f"enabled__outlook__{tool}": "on" for tool in TOOLS}
+        fields["write_allow__outlook"] = "on"
+        fields["write_tool__outlook__mark_read"] = "on"
+        status, _, location = browser.post("/permissions", fields, follow=False)
+        assert status == 303 and location == "/permissions?saved=1"
+
+        account = load_config(env).account("outlook")
+        assert account.allow_write is True
+        assert account.enabled_write_tools == ["mark_read"]
+        assert account.can_write("mark_read") and not account.can_write("move_message")
+        assert "[accounts.personal]" in env.read_text()  # untouched account still present
+
+        page = browser.get("/permissions")[1]
+        assert 'name="write_allow__outlook" checked' in page
+        assert 'name="write_tool__outlook__mark_read" checked' in page
+        assert 'name="write_tool__outlook__move_message" checked' not in page
+
+    def test_unchecking_write_access_removes_the_keys(self, browser, env):
+        browser.post(
+            "/permissions",
+            {"write_allow__outlook": "on", "write_tool__outlook__mark_read": "on"},
+            follow=False,
+        )
+        browser.post("/permissions", {}, follow=False)
+        text = env.read_text()
+        assert "allow_write" not in text
+        assert "enabled_write_tools" not in text
 
 
 class TestProvidersPage:
