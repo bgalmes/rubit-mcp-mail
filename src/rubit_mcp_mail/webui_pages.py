@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config
-from .config_editor import checkbox_name
+from .config_editor import checkbox_name, write_parent_checkbox_name, write_tool_checkbox_name
 from .diagnostics import AccountReport, Report
-from .permissions import TOOL_LABELS, TOOL_NAMES
+from .permissions import TOOL_LABELS, TOOL_NAMES, WRITE_TOOL_LABELS, WRITE_TOOL_NAMES
 from .providers import PROFILES, THUNDERBIRD_CLIENT_ID
 
 PAGE_STYLE = """
@@ -65,6 +65,7 @@ pre { background: #f1f1ef; padding: 0.8rem; border-radius: 5px; overflow-x: auto
 pre.wrap { white-space: pre-wrap; }
 .actions { white-space: nowrap; }
 .actions a { margin-right: 0.7rem; }
+label:has(input:disabled) { color: #999; }
 """
 
 NAV = (
@@ -373,6 +374,66 @@ config file. Nothing in your mailbox is touched.</p>
 
 
 # -- permissions -------------------------------------------------------------
+def _write_section(config: Config) -> str:
+    """The opt-in half of the permissions page: the write tools.
+
+    Deliberately a separate table from the read toggles above it, because the
+    semantics are inverted - unchecked means off here, and the per-tool boxes
+    do nothing at all until the account's parent switch is on.
+    """
+    rows = []
+    for name, account in sorted(config.accounts.items()):
+        parent_checked = " checked" if account.allow_write else ""
+        tool_disabled = "" if account.allow_write else " disabled"
+        cells = [
+            f'<td class="account">{esc(name)}</td>',
+            f'<td><label><input type="checkbox" class="write-parent" '
+            f'name="{esc(write_parent_checkbox_name(name))}"'
+            f"{parent_checked}> Allow write access</label></td>",
+        ]
+        for tool in WRITE_TOOL_NAMES:
+            checked = " checked" if tool in account.enabled_write_tools else ""
+            cells.append(
+                f'<td><label><input type="checkbox" class="write-tool" '
+                f'name="{esc(write_tool_checkbox_name(name, tool))}"'
+                f"{checked}{tool_disabled}> {esc(WRITE_TOOL_LABELS[tool])}</label></td>"
+            )
+        rows.append(f'<tr class="write-row">{"".join(cells)}</tr>')
+
+    header_cells = "".join(f"<th>{esc(WRITE_TOOL_LABELS[tool])}</th>" for tool in WRITE_TOOL_NAMES)
+    span = 2 + len(WRITE_TOOL_NAMES)
+    body_rows = "\n".join(rows) or f'<tr><td colspan="{span}">No accounts configured.</td></tr>'
+    return f"""
+<h2>Write access</h2>
+<p class="hint">Off by default. A write tool only runs when both "Allow write access"
+and that specific tool are checked for the account - the individual checkboxes have
+no effect while "Allow write access" is unchecked. There is no delete/trash action:
+this server can never remove mail.</p>
+<table>
+<tr><th>Account</th><th>Allow write access</th>{header_cells}</tr>
+{body_rows}
+</table>
+<script>
+document.querySelectorAll('.write-row').forEach(function (row) {{
+  var parent = row.querySelector('.write-parent');
+  parent.addEventListener('change', function () {{
+    row.querySelectorAll('.write-tool').forEach(function (box) {{
+      box.disabled = !parent.checked;
+    }});
+  }});
+}});
+var permissionsForm = document.getElementById('permissions-form');
+if (permissionsForm) {{
+  permissionsForm.addEventListener('submit', function () {{
+    document.querySelectorAll('.write-tool').forEach(function (box) {{
+      box.disabled = false;
+    }});
+  }});
+}}
+</script>
+"""
+
+
 def render_permissions(config: Config, saved: bool = False) -> str:
     rows = []
     for name, account in sorted(config.accounts.items()):
@@ -394,11 +455,13 @@ def render_permissions(config: Config, saved: bool = False) -> str:
 <h1>Account permissions</h1>
 <p class="hint">Uncheck a box to forbid that tool for an account. Restart the MCP server
 for changes to take effect.</p>
-<form method="post" action="/permissions">
+<form method="post" action="/permissions" id="permissions-form">
+<h2>Read access</h2>
 <table>
 <tr><th>Account</th>{header_cells}</tr>
 {body_rows}
 </table>
+{_write_section(config)}
 <button class="primary" type="submit">Save</button>
 </form>
 """

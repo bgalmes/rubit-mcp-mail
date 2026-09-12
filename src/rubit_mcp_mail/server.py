@@ -22,7 +22,7 @@ from pydantic import Field
 from .config import config_path
 from .mime import DEFAULT_MAX_CHARS
 from .models import AccountStatus, StaleHandleError
-from .permissions import TOOL_NAMES
+from .permissions import TOOL_NAMES, WRITE_TOOL_NAMES
 from .session import Session
 
 log = logging.getLogger(__name__)
@@ -30,17 +30,24 @@ log = logging.getLogger(__name__)
 mcp = MCPServer(
     name="rubit-mcp-mail",
     instructions=(
-        "Read-only access to the user's mailboxes over IMAP. Use list_folders to "
-        "discover folders (referred to by normalized roles such as 'inbox', 'sent', "
-        "'junk'), list_messages to browse and search_messages to find mail. Both "
-        "return opaque handles; pass a handle to read_message for the full body. "
-        "Reading never marks mail as read and nothing in the mailbox can be modified."
+        "Access to the user's mailboxes over IMAP. Use list_folders to discover "
+        "folders (referred to by normalized roles such as 'inbox', 'sent', 'junk'), "
+        "list_messages to browse and search_messages to find mail. Both return "
+        "opaque handles; pass a handle to read_message for the full body. Reading "
+        "never marks mail as read. mark_read and move_message can modify a mailbox "
+        "but are disabled per account by default - they only work for an account "
+        "where write access has been explicitly turned on in the permissions UI "
+        "(`rubit-mcp-mail permissions`), and even then only if that specific tool "
+        "was enabled; otherwise they return an error explaining which switch is off. "
+        "There is no way to delete or trash mail through this server."
     ),
 )
 
 _session = Session()
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=True)
+MARK_READ = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=True)
+MOVE = ToolAnnotations(read_only_hint=False, destructive_hint=True, open_world_hint=True)
 
 AccountArg = Annotated[
     str | None,
@@ -79,6 +86,39 @@ def guarded(fn):
         except Exception:  # noqa: BLE001
             return fn(**kwargs)
         if fn.__name__ in account.disabled_tools:
+            return _fail(ValueError(f"{fn.__name__!r} is disabled for account {account.name!r}"))
+        return fn(**kwargs)
+
+    return wrapper
+
+
+def guarded_write(fn):
+    """Block a write tool call unless the account has opted into it.
+
+    Unlike `guarded`, this is opt-in: the account must both have
+    `allow_write` on (the parent switch) and list this tool in
+    `enabled_write_tools`. Same pass-through-on-unresolvable-account
+    behavior as `guarded`.
+    """
+    assert fn.__name__ in WRITE_TOOL_NAMES, (
+        f"{fn.__name__!r} is not in permissions.WRITE_TOOL_NAMES"
+    )
+
+    @functools.wraps(fn)
+    def wrapper(**kwargs):
+        try:
+            account = _session.account(kwargs.get("account"))
+        except Exception:  # noqa: BLE001
+            return fn(**kwargs)
+        if not account.allow_write:
+            return _fail(
+                ValueError(
+                    f"Write access is disabled for account {account.name!r}. Enable "
+                    "it (and this tool) in the permissions UI (`rubit-mcp-mail "
+                    "permissions`) to allow it."
+                )
+            )
+        if fn.__name__ not in account.enabled_write_tools:
             return _fail(ValueError(f"{fn.__name__!r} is disabled for account {account.name!r}"))
         return fn(**kwargs)
 
@@ -242,6 +282,56 @@ def get_attachment(
         path = _session.download_path(filename)
         path.write_bytes(data)
         return {"path": str(path), "filename": path.name, "bytes": len(data)}
+    except Exception as exc:  # noqa: BLE001
+        return _fail(exc)
+
+
+@mcp.tool(annotations=MARK_READ)
+@guarded_write
+def mark_read(
+    handle: Annotated[str, Field(description="A handle from list_messages or search_messages.")],
+    account: AccountArg = None,
+) -> dict[str, Any] | str:
+    """Mark one message as read (sets the \\Seen flag).
+
+    Disabled by default: the account needs write access and this specific
+    tool enabled in the permissions UI (`rubit-mcp-mail permissions`).
+    """
+    try:
+        _session.backend(account).mark_read(handle)
+        return {"handle": handle, "seen": True}
+    except StaleHandleError as exc:
+        return f"Error: {exc}"
+    except Exception as exc:  # noqa: BLE001
+        return _fail(exc)
+
+
+@mcp.tool(annotations=MOVE)
+@guarded_write
+def move_message(
+    handle: Annotated[str, Field(description="A handle from list_messages or search_messages.")],
+    folder: Annotated[
+        str,
+        Field(
+            description="Destination folder role ('inbox', 'sent', 'junk', 'trash', "
+            "'drafts', 'archive') or a raw server folder name."
+        ),
+    ],
+    account: AccountArg = None,
+) -> dict[str, Any] | str:
+    """Move one message to another folder.
+
+    The message's handle is stale immediately afterwards - re-run
+    list_messages or search_messages against the destination folder to get a
+    fresh handle for it. Disabled by default: the account needs write access
+    and this specific tool enabled in the permissions UI
+    (`rubit-mcp-mail permissions`).
+    """
+    try:
+        destination = _session.backend(account).move_message(handle, folder)
+        return {"moved_to": destination}
+    except StaleHandleError as exc:
+        return f"Error: {exc}"
     except Exception as exc:  # noqa: BLE001
         return _fail(exc)
 

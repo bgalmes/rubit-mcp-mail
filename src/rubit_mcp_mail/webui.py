@@ -29,6 +29,7 @@ from .auth.oauth_microsoft import DeviceFlow
 from .config import Config, config_path, load_config
 from .config_editor import (
     apply_toggles,
+    apply_write_toggles,
     load_document,
     remove_account,
     remove_provider_override,
@@ -38,6 +39,7 @@ from .config_editor import (
     upsert_provider_override,
     validate_account_form,
     write_disabled_tools,
+    write_write_permissions,
 )
 from .diagnostics import run_doctor
 from .secrets import SecretStore
@@ -308,7 +310,9 @@ class Handler(BaseHTTPRequestHandler):
         config: Config = load_config()
         if method == "GET":
             return pages.render_permissions(config, saved=query.get("saved") == ["1"])
-        write_disabled_tools(path, apply_toggles(list(config.accounts), posted))
+        names = list(config.accounts)
+        write_disabled_tools(path, apply_toggles(names, posted))
+        write_write_permissions(path, apply_write_toggles(names, posted))
         raise Redirect("/permissions?saved=1")
 
     def _providers(

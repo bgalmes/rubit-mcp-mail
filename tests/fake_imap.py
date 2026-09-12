@@ -31,8 +31,6 @@ class FakeIMAPClient:
 
     def select_folder(self, folder, readonly=False):
         self.calls.append(("select_folder", folder, readonly))
-        if not readonly:
-            raise AssertionError("select_folder must always be read-only (EXAMINE)")
         self.selected = folder
         return {b"UIDVALIDITY": self._uidvalidity, b"EXISTS": len(self._messages.get(folder, {}))}
 
@@ -66,9 +64,30 @@ class FakeIMAPClient:
     def logout(self):
         self.calls.append(("logout",))
 
-    # -- guards ----------------------------------------------------------
+    # -- the two permitted mutations (mark_read / move_message) ----------
+    def add_flags(self, messages, flags, silent=False):
+        self.calls.append(("add_flags", tuple(messages), tuple(flags)))
+        store = self._messages.get(self.selected, {})
+        wanted = {f if isinstance(f, bytes) else f.encode() for f in flags}
+        for uid in messages:
+            if uid not in store:
+                continue
+            existing = set(store[uid].get(b"FLAGS", ()))
+            store[uid][b"FLAGS"] = tuple(existing | wanted)
+
+    def move(self, messages, folder):
+        self.calls.append(("move", tuple(messages), folder))
+        source = self._messages.setdefault(self.selected, {})
+        dest = self._messages.setdefault(folder, {})
+        for uid in messages:
+            entry = source.pop(uid, None)
+            if entry is None:
+                continue
+            dest[max(dest.keys(), default=0) + 1] = entry
+
+    # -- guards ------------------------------------------------------------
     def _forbidden(self, *args, **kwargs):
         raise AssertionError("mutating IMAP command called in a read-only backend")
 
-    add_flags = remove_flags = set_flags = _forbidden
-    delete_messages = expunge = copy = move = append = _forbidden
+    remove_flags = set_flags = _forbidden
+    delete_messages = expunge = copy = append = _forbidden

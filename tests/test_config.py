@@ -59,25 +59,81 @@ port = 1993
 
 class TestDisabledTools:
     def test_loads_disabled_tools(self, write_config):
-        config = load_config(write_config('''
+        config = load_config(
+            write_config("""
 [accounts.x]
 provider = "generic"
 email = "a@b.c"
 host = "h"
 disabled_tools = ["read_message", "get_attachment"]
-'''))
+""")
+        )
         assert config.account("x").disabled_tools == ["read_message", "get_attachment"]
 
     def test_defaults_to_empty(self, write_config):
-        config = load_config(write_config('[accounts.x]\nprovider="generic"\nemail="a@b.c"\nhost="h"'))
+        config = load_config(
+            write_config('[accounts.x]\nprovider="generic"\nemail="a@b.c"\nhost="h"')
+        )
         assert config.account("x").disabled_tools == []
 
     def test_unknown_tool_name_is_caught(self, write_config):
         with pytest.raises(ValueError, match="unknown tool.*send_mail"):
-            load_config(write_config(
-                '[accounts.x]\nprovider="generic"\nemail="a@b.c"\nhost="h"\n'
-                'disabled_tools = ["send_mail"]'
-            ))
+            load_config(
+                write_config(
+                    '[accounts.x]\nprovider="generic"\nemail="a@b.c"\nhost="h"\n'
+                    'disabled_tools = ["send_mail"]'
+                )
+            )
+
+
+class TestWritePermissions:
+    def test_defaults_to_off(self, write_config):
+        config = load_config(
+            write_config('[accounts.x]\nprovider="generic"\nemail="a@b.c"\nhost="h"')
+        )
+        account = config.account("x")
+        assert account.allow_write is False
+        assert account.enabled_write_tools == []
+        assert account.can_write("mark_read") is False
+
+    def test_loads_write_permissions(self, write_config):
+        config = load_config(
+            write_config("""
+[accounts.x]
+provider = "generic"
+email = "a@b.c"
+host = "h"
+allow_write = true
+enabled_write_tools = ["mark_read"]
+""")
+        )
+        account = config.account("x")
+        assert account.allow_write is True
+        assert account.enabled_write_tools == ["mark_read"]
+        assert account.can_write("mark_read") is True
+        assert account.can_write("move_message") is False
+
+    def test_parent_off_blocks_write_even_if_tool_listed(self, write_config):
+        """allow_write=False must win regardless of enabled_write_tools."""
+        config = load_config(
+            write_config("""
+[accounts.x]
+provider = "generic"
+email = "a@b.c"
+host = "h"
+enabled_write_tools = ["mark_read"]
+""")
+        )
+        assert config.account("x").can_write("mark_read") is False
+
+    def test_unknown_write_tool_name_is_caught(self, write_config):
+        with pytest.raises(ValueError, match="unknown tool.*delete_message"):
+            load_config(
+                write_config(
+                    '[accounts.x]\nprovider="generic"\nemail="a@b.c"\nhost="h"\n'
+                    'enabled_write_tools = ["delete_message"]'
+                )
+            )
 
 
 class TestProviderOverrides:

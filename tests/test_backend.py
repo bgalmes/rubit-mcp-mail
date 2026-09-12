@@ -179,13 +179,13 @@ class TestReadOnly:
         assert body_fetches and all(k.startswith("BODY.PEEK[") for k in body_fetches)
 
     def test_no_mutating_commands_exist(self):
-        """Guard against a future edit calling a mutating IMAP command."""
+        """Guard against a future edit calling a mutating IMAP command anywhere
+        other than the two deliberately-permitted write methods."""
         import inspect
         import re
 
         from rubit_mcp_mail.backends import imap
 
-        source = inspect.getsource(imap)
         forbidden = (
             "add_flags",
             "remove_flags",
@@ -199,6 +199,12 @@ class TestReadOnly:
             "delete_folder",
             "rename_folder",
         )
+        source = inspect.getsource(imap)
+        # mark_read/move_message are the sole intentional, permission-gated
+        # exceptions (see backends/base.py); strip their bodies before
+        # scanning the rest of the module for an accidental mutation.
+        for name in ("mark_read", "move_message"):
+            source = source.replace(inspect.getsource(getattr(imap.ImapBackend, name)), "")
         # Only calls on the IMAP client count; `criteria.append(...)` is a list op.
         called = set(re.findall(r"client\.(\w+)\s*\(", source))
         assert not called & set(forbidden), f"mutating IMAP calls: {called & set(forbidden)}"
@@ -234,6 +240,38 @@ class TestReading:
         handle = {m.subject: m.handle for m in backend.list_messages(limit=5)}["Subject 3"]
         with pytest.raises(ValueError, match="Attachments: 2"):
             backend.fetch_attachment(handle, "99")
+
+
+class TestWrites:
+    def test_mark_read_sets_seen_flag(self):
+        backend, fake = make_backend()
+        handle = backend.list_messages(limit=5, unread_only=True)[0].handle
+        uid = MessageHandle.decode(handle).uid
+        backend.mark_read(handle)
+        assert b"\\Seen" in fake._messages["INBOX"][uid][b"FLAGS"]
+
+    def test_mark_read_selects_writable(self):
+        """mark_read must SELECT (readonly=False), unlike every read path."""
+        backend, fake = make_backend()
+        handle = backend.list_messages(limit=1)[0].handle
+        backend.mark_read(handle)
+        selects = [c for c in fake.calls if c[0] == "select_folder"]
+        assert selects[-1][2] is False
+
+    def test_move_message_relocates_to_destination(self):
+        backend, fake = make_backend()
+        handle = backend.list_messages(limit=1)[0].handle
+        uid = MessageHandle.decode(handle).uid
+        dest = backend.move_message(handle, "junk")
+        assert dest == "Junk Email"
+        assert uid not in fake._messages["INBOX"]
+        assert fake._messages["Junk Email"]
+
+    def test_move_message_unknown_folder(self):
+        backend, _ = make_backend()
+        handle = backend.list_messages(limit=1)[0].handle
+        with pytest.raises(ValueError, match="No folder matching"):
+            backend.move_message(handle, "does-not-exist")
 
 
 class TestHandles:
