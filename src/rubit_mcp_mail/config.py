@@ -9,11 +9,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import tomlkit
 import tomllib
 from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_validator
 
 from .permissions import TOOL_NAMES
 from .providers import ImapProfile, apply_overrides, get_profile
+
+# What a freshly created config gets. Written in tilde form (load_config
+# expanduser()s it) so the file stays portable between machines.
+DEFAULT_DOWNLOAD_DIR = "~/Downloads/rubit-mcp-mail"
 
 
 class Account(BaseModel):
@@ -135,3 +140,71 @@ def load_config(path: Path | None = None) -> Config:
         unknown = ", ".join(sorted(raw))
         raise ValueError(f"Unknown key(s) in {path}: {unknown}")
     return Config(download_dir=download_dir, accounts=accounts, providers=providers_raw)
+
+
+# The four keys the setup wizard owns. Everything else in an account table
+# (disabled_tools, hand-written comments) is none of its business.
+_MANAGED_KEYS = ("client_id", "host", "port", "ssl")
+
+
+def add_account(
+    path: Path,
+    name: str,
+    provider: str,
+    email: str,
+    *,
+    client_id: str | None = None,
+    host: str | None = None,
+    port: int | None = None,
+    ssl: bool | None = None,
+) -> None:
+    """Create or update `[accounts.<name>]` in the TOML file at `path`.
+
+    Creates the file, with a default `download_dir`, when it does not exist
+    yet. Every other account, key, comment, and ordering survives untouched, so
+    the setup wizard is safe to re-run to add a second account or repair a
+    broken one.
+
+    The four optional keys are authoritative: passing None *removes* the key
+    rather than leaving it. That matters when repairing an account whose
+    provider changed - a `host` left over from a generic account would
+    otherwise silently override the new provider's own server.
+    """
+    # Validate before touching the file, reusing the model's own rules so a bad
+    # combination is refused with the same message load_config would give.
+    Account(
+        name=name,
+        provider=provider,
+        email=email,
+        client_id=client_id,
+        host=host,
+        port=port,
+        ssl=ssl,
+    )
+
+    if path.exists():
+        doc = tomlkit.parse(path.read_text("utf-8"))
+    else:
+        doc = tomlkit.document()
+        doc["download_dir"] = DEFAULT_DOWNLOAD_DIR
+
+    accounts = doc.get("accounts")
+    if accounts is None:
+        accounts = tomlkit.table(is_super_table=True)
+        doc["accounts"] = accounts
+
+    table = accounts.get(name)
+    if table is None:
+        table = tomlkit.table()
+        accounts[name] = table
+
+    table["provider"] = provider
+    table["email"] = email
+    for key, value in zip(_MANAGED_KEYS, (client_id, host, port, ssl), strict=True):
+        if value is None:
+            table.pop(key, None)
+        else:
+            table[key] = value
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(tomlkit.dumps(doc), encoding="utf-8")

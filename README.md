@@ -9,6 +9,38 @@ and bodies are fetched with `BODY.PEEK`, so reading a message does not even mark
 it as read. There are no send, move, delete, or flag code paths, and a test
 asserts none are ever added.
 
+## Quick install
+
+Download the installer for your system from the
+[latest release](https://github.com/bgalmes/rubit-mcp-mail/releases/latest) and
+run it:
+
+| System | File |
+| --- | --- |
+| Windows | `rubit-mcp-mail-setup-windows.exe` |
+| Linux | `rubit-mcp-mail-setup-linux` — `chmod +x` it first |
+
+Nothing needs to be installed beforehand: Python and every dependency are inside
+that one file. A window asks for your provider and email address, signs you in,
+and registers the mail server with Claude Desktop and Claude Code if it finds
+them — restart Claude Desktop afterwards and your mail is there.
+
+Run it again whenever you want to add a second mailbox or repair a sign-in; it
+updates what is already configured rather than replacing it. On a machine with
+no desktop (over SSH, say) the same file walks you through it in the terminal.
+
+**A note on antivirus warnings.** Windows Defender or Avast may flag this `.exe`.
+This is a known false positive common to unsigned PyInstaller-built applications
+— an antivirus heuristic reacting to the pattern of a bundled Python runtime,
+not anything this project's code actually does. Proper code-signing is the
+durable fix and is tracked as a follow-up, not done yet. In the meantime: report
+it to your antivirus vendor as a false positive (Avast has a submission form for
+this), or build from source using the instructions below and compare against
+what's published here.
+
+Everything below is the manual setup that installer automates — read on if you
+want to run from source or something needs fixing by hand.
+
 ## Tools
 
 | Tool | What it does |
@@ -65,8 +97,10 @@ Claude Desktop) until it is restarted.
 
 ## The GUI
 
-Everything in `config.toml` can be managed from a local web page instead of a
-text editor:
+[Quick install](#quick-install) and `rubit-mcp-mail install` cover first-time
+setup. For everything after that — a second mailbox, a typo'd `client_id`, a
+changed download directory — this is the editor, and everything in
+`config.toml` can be managed from a local web page instead of a text editor:
 
 ```bash
 rubit-mcp-mail gui
@@ -194,8 +228,10 @@ org policies don't govern.
 
 ### 2. Configure
 
-The easy way is `rubit-mcp-mail gui`, which creates the file and fills it in
-from a form — see [The GUI](#the-gui). By hand it is:
+Two ways avoid writing this by hand: `rubit-mcp-mail install` walks a first-time
+setup end to end (config, sign-in, and registering with Claude), and
+`rubit-mcp-mail gui` opens [the config editor](#the-gui) for this and every
+later change. By hand it is:
 
 ```bash
 mkdir -p ~/.config/rubit-mcp-mail
@@ -397,12 +433,38 @@ API instead implements the `MailBackend` protocol in
 ./.venv/bin/python -m pytest -q
 ```
 
+### Building the installers
+
+`.github/workflows/release.yml` builds them for Windows and Linux and attaches
+them to every published release. The same two steps build one locally — the
+server executable first, then the installer that carries it:
+
+```bash
+./.venv/bin/python -m pip install -e ".[build]"
+./.venv/bin/pyinstaller --onefile --name rubit-mcp-mail \
+  --version-file packaging/version_info.txt packaging/cli_entry.py
+./.venv/bin/pyinstaller --onefile --windowed --name rubit-mcp-mail-setup \
+  --version-file packaging/version_info.txt \
+  --add-binary "dist/rubit-mcp-mail:." packaging/setup_entry.py
+```
+
+On Windows the `--add-binary` separator is `;` rather than `:`.
+`packaging/version_info.txt` gives both binaries a real product name and
+description instead of being completely anonymous — see the antivirus note
+above; Windows-only, silently ignored on Linux. The wizard unpacks the server
+executable into `~/.local/share/rubit-mcp-mail/bin`
+(`%LOCALAPPDATA%\Programs\rubit-mcp-mail` on Windows) and registers that path,
+so the installer itself can be deleted afterwards.
+
 ## Layout
 
 ```
 src/rubit_mcp_mail/
   server.py        MCP tool definitions
-  __main__.py      CLI: serve | auth | doctor | gui
+  __main__.py      CLI: serve | install | auth | doctor | gui
+  installer.py     setup wizard: writes config, signs in, registers with Claude
+  installer_gui.py the setup window (tkinter), falling back to the terminal
+  claude_registration.py  claude_desktop_config.json / `claude mcp add`
   session.py       wires config + auth + backend; attachment path safety
   config.py        TOML config -> Account models
   diagnostics.py   the doctor checks, as data (shared by the CLI and the GUI)

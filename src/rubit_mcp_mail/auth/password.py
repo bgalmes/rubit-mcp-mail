@@ -6,14 +6,12 @@ basic auth for those. Use the `outlook` provider instead.
 
 from __future__ import annotations
 
-import getpass
-
 from imapclient import IMAPClient
 from imapclient.exceptions import LoginError
 
 from ..config import Account
 from ..secrets import SecretStore
-from .base import NeedsAuthError
+from .base import AuthUI, ConsoleAuthUI, NeedsAuthError
 
 
 class PasswordAuth:
@@ -41,20 +39,19 @@ class PasswordAuth:
     def store_password(self, password: str) -> str:
         """Persist an app password from any front end. Returns where it landed.
 
-        Split out of `interactive_setup` so a non-terminal caller (the GUI) can
-        store a password without a getpass prompt, and still through the one
-        SecretStore path - there is no second place for a credential to live.
+        Split out of `interactive_setup` so a caller that cannot prompt - the
+        web GUI, which receives the password in a form POST rather than pulling
+        it from a terminal - still stores it through the one SecretStore path.
         """
         password = (password or "").strip()
         if not password:
             raise ValueError("No password entered; nothing stored.")
         return f"Password stored in {self._store.set(self.secret_key, password)}."
 
-    def interactive_setup(self) -> str:
-        print(f"Account : {self._account.name} <{self._account.email}>")
-        print(f"Server  : {self._account.profile.host}:{self._account.profile.port}")
-        print("Enter the app password for this mailbox (input is hidden).")
-        return self.store_password(getpass.getpass("App password: "))
+    def interactive_setup(self, ui: AuthUI | None = None) -> str:
+        """Pull a password from `ui` (the terminal by default) and store it."""
+        ui = ui or ConsoleAuthUI()
+        return self.store_password(ui.ask_password(self._account))
 
     def status(self) -> tuple[str, str | None]:
         if self._password():

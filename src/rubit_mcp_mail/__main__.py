@@ -1,4 +1,4 @@
-"""CLI: serve | auth | doctor | gui.
+"""CLI: serve | install | auth | doctor | gui.
 
 `auth` is a CLI command rather than an MCP tool because the device-code flow is
 interactive and blocking - it is a one-time setup step, not something a model
@@ -42,6 +42,12 @@ def cmd_gui(args: argparse.Namespace) -> int:
 
     serve(port=args.port, open_browser=not args.no_browser, path=getattr(args, "path", "/"))
     return 0
+
+
+def cmd_install(args: argparse.Namespace) -> int:
+    from .installer_gui import run
+
+    return run(force_console=args.console)
 
 
 def cmd_auth(args: argparse.Namespace) -> int:
@@ -103,7 +109,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print(f"  cat > {report.config_path} <<'EOF'")
         print(CONFIG_TEMPLATE.rstrip())
         print("  EOF")
-        print("\nOr set it up in a browser:  rubit-mcp-mail gui")
+        print("\nOr set one up without writing TOML by hand:")
+        print("  rubit-mcp-mail install   (step-by-step setup wizard)")
+        print("  rubit-mcp-mail gui       (edit the config in a browser)")
         return 1
     if report.config_error:
         print(f"\nerror: {report.config_error}", file=sys.stderr)
@@ -144,6 +152,14 @@ def main() -> int:
     sub.add_parser("serve", help="Run the MCP server on stdio (default).").set_defaults(
         func=cmd_serve
     )
+
+    install = sub.add_parser(
+        "install", help="Set up an account step by step: config, sign-in, and Claude."
+    )
+    install.add_argument(
+        "--console", action="store_true", help="Use text prompts instead of a window."
+    )
+    install.set_defaults(func=cmd_install)
 
     auth = sub.add_parser("auth", help="Sign in to an account (one-time, interactive).")
     auth.add_argument("account", nargs="?", help="Account name; optional if only one.")

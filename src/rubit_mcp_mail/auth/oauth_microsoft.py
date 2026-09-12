@@ -18,7 +18,7 @@ from imapclient.exceptions import LoginError
 from ..config import Account
 from ..providers import MicrosoftOAuth
 from ..secrets import SecretStore
-from .base import NeedsAuthError
+from .base import AuthUI, ConsoleAuthUI, NeedsAuthError
 
 log = logging.getLogger(__name__)
 
@@ -174,14 +174,16 @@ class MicrosoftDeviceCodeAuth:
             )
         return f"Signed in as {signed_in or self._account.email}. Token cached."
 
-    def interactive_setup(self) -> str:
+    def interactive_setup(self, ui: AuthUI | None = None) -> str:
+        """Show the code through `ui` (the terminal by default), then block.
+
+        Front ends that cannot block for the whole handshake - the web GUI,
+        which has to answer the HTTP request that started it - drive
+        `begin_device_flow` and `complete_device_flow` themselves instead.
+        """
+        ui = ui or ConsoleAuthUI()
         started = self.begin_device_flow()
-
-        print()
-        print(started.message)
-        print()
-        print("Waiting for you to complete sign-in in the browser...")
-
+        ui.device_code(started.flow)
         return self.complete_device_flow(started)
 
     def status(self) -> tuple[str, str | None]:
