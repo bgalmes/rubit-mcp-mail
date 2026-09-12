@@ -1,4 +1,4 @@
-"""CLI: serve | auth | doctor | permissions.
+"""CLI: serve | install | auth | doctor | gui.
 
 `auth` is a CLI command rather than an MCP tool because the device-code flow is
 interactive and blocking - it is a one-time setup step, not something a model
@@ -11,8 +11,7 @@ import argparse
 import logging
 import sys
 
-from .config import config_path, load_config
-from .secrets import SecretStore
+from .diagnostics import AccountReport, Report, run_doctor
 from .session import Session
 
 CONFIG_TEMPLATE = """# ~/.config/rubit-mcp-mail/config.toml
@@ -38,11 +37,17 @@ def cmd_serve(_args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_permissions(args: argparse.Namespace) -> int:
+def cmd_gui(args: argparse.Namespace) -> int:
     from .webui import serve
 
-    serve(port=args.port, open_browser=not args.no_browser)
+    serve(port=args.port, open_browser=not args.no_browser, path=getattr(args, "path", "/"))
     return 0
+
+
+def cmd_install(args: argparse.Namespace) -> int:
+    from .installer_gui import run
+
+    return run(force_console=args.console)
 
 
 def cmd_auth(args: argparse.Namespace) -> int:
@@ -67,87 +72,71 @@ def cmd_auth(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_account(report: AccountReport) -> None:
+    print(f"\n=== {report.name} ===")
+    if report.error and not report.auth_state:
+        print(f"  FAIL  {report.error}")
+        return
+
+    print(f"  provider  {report.provider}  ({report.host}:{report.port}, ssl={report.ssl})")
+    print(f"  email     {report.email}")
+    detail = f"  - {report.auth_detail}" if report.auth_detail else ""
+    print(f"  auth      {report.auth_state}{detail}")
+    if report.auth_state != "ok":
+        print(f"  ->  run: rubit-mcp-mail auth {report.name}")
+        return
+    if report.error:
+        print(f"  FAIL  {report.error}")
+        return
+
+    print(f"  connected capabilities: {' '.join(report.capabilities[:12])}")
+    print(f"  folders   {len(report.folders)} found")
+    for folder in report.folders:
+        counts = ""
+        if folder.messages is not None:
+            counts = f"{folder.messages:>6} msgs, {folder.unseen or 0} unread"
+        print(f"    [{folder.role:<7}] {folder.name:<28} {counts}")
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
-    path = config_path()
-    print(f"config: {path}")
-    try:
-        config = load_config()
-    except FileNotFoundError:
+    names = [args.account] if args.account else None
+    report: Report = run_doctor(names)
+    print(f"config: {report.config_path}")
+
+    if report.missing_config:
         print("\nNo config file yet. Create it with:\n")
-        print(f"  mkdir -p {path.parent}")
-        print(f"  cat > {path} <<'EOF'")
+        print(f"  mkdir -p {report.config_path.parent}")
+        print(f"  cat > {report.config_path} <<'EOF'")
         print(CONFIG_TEMPLATE.rstrip())
         print("  EOF")
+        print("\nOr set one up without writing TOML by hand:")
+        print("  rubit-mcp-mail install   (step-by-step setup wizard)")
+        print("  rubit-mcp-mail gui       (edit the config in a browser)")
         return 1
-    except Exception as exc:  # noqa: BLE001
-        print(f"\nerror: {exc}", file=sys.stderr)
+    if report.config_error:
+        print(f"\nerror: {report.config_error}", file=sys.stderr)
         return 1
 
-    print(f"downloads: {config.download_dir}")
-    if config.providers:
-        for name, overrides in sorted(config.providers.items()):
-            keys = []
-            for key, value in overrides.items():
-                if key == "oauth" and isinstance(value, dict):
-                    keys.extend(f"oauth.{sub}" for sub in value)
-                else:
-                    keys.append(key)
-            print(f"provider overrides: {name} ({', '.join(sorted(keys))})")
-    store = SecretStore()
-    print(f"secrets: {store.backend_name}")
-    if store.unavailable_reason:
+    print(f"downloads: {report.download_dir}")
+    for name, keys in report.provider_overrides.items():
+        print(f"provider overrides: {name} ({', '.join(keys)})")
+    print(f"secrets: {report.secrets_backend}")
+    if report.secrets_warning:
         # The same binary run from a GUI-launched process may resolve a
         # different backend, which is the classic "works in the terminal but
         # not under the MCP client" failure.
         print("  note: credentials in the OS keyring are not readable here.")
-    session = Session(config=config, store=store)
 
-    names = [args.account] if args.account else list(config.accounts)
-    if not names:
+    if not report.accounts:
         print("\nNo accounts configured.")
         return 1
 
-    failures = 0
-    for name in names:
-        print(f"\n=== {name} ===")
-        try:
-            account = session.account(name)
-        except Exception as exc:  # noqa: BLE001
-            print(f"  FAIL  {exc}")
-            failures += 1
-            continue
-
-        profile = account.profile
-        print(f"  provider  {account.provider}  ({profile.host}:{profile.port}, ssl={profile.ssl})")
-        print(f"  email     {account.email}")
-
-        state, detail = session.auth_for(account).status()
-        print(f"  auth      {state}" + (f"  - {detail}" if detail else ""))
-        if state != "ok":
-            print(f"  ->  run: rubit-mcp-mail auth {name}")
-            failures += 1
-            continue
-
-        backend = session.backend(name)
-        try:
-            caps = backend.capabilities()
-            print(f"  connected capabilities: {' '.join(caps[:12])}")
-            folders = backend.list_folders()
-            print(f"  folders   {len(folders)} found")
-            for folder in folders:
-                counts = ""
-                if folder.messages is not None:
-                    counts = f"{folder.messages:>6} msgs, {folder.unseen or 0} unread"
-                print(f"    [{folder.role:<7}] {folder.name:<28} {counts}")
-        except Exception as exc:  # noqa: BLE001
-            print(f"  FAIL  {type(exc).__name__}: {exc}")
-            failures += 1
-        finally:
-            backend.close()
+    for account in report.accounts:
+        _print_account(account)
 
     print()
-    if failures:
-        print(f"{failures} account(s) not working.")
+    if report.failures:
+        print(f"{report.failures} account(s) not working.")
         return 1
     print("All accounts OK.")
     return 0
@@ -164,6 +153,14 @@ def main() -> int:
         func=cmd_serve
     )
 
+    install = sub.add_parser(
+        "install", help="Set up an account step by step: config, sign-in, and Claude."
+    )
+    install.add_argument(
+        "--console", action="store_true", help="Use text prompts instead of a window."
+    )
+    install.set_defaults(func=cmd_install)
+
     auth = sub.add_parser("auth", help="Sign in to an account (one-time, interactive).")
     auth.add_argument("account", nargs="?", help="Account name; optional if only one.")
     auth.set_defaults(func=cmd_auth)
@@ -172,16 +169,18 @@ def main() -> int:
     doctor.add_argument("account", nargs="?", help="Only check this account.")
     doctor.set_defaults(func=cmd_doctor)
 
-    permissions = sub.add_parser(
-        "permissions", help="Open a local web GUI to allow/forbid tools per account."
-    )
-    permissions.add_argument(
-        "--port", type=int, default=0, help="Port to bind (default: pick a free one)."
-    )
-    permissions.add_argument(
-        "--no-browser", action="store_true", help="Don't open a browser automatically."
-    )
-    permissions.set_defaults(func=cmd_permissions)
+    for name, help_text, path in (
+        ("gui", "Open a local web GUI to view and edit the config.", "/"),
+        ("permissions", "Open the GUI on the allow/forbid-tools page.", "/permissions"),
+    ):
+        gui = sub.add_parser(name, help=help_text)
+        gui.add_argument(
+            "--port", type=int, default=0, help="Port to bind (default: pick a free one)."
+        )
+        gui.add_argument(
+            "--no-browser", action="store_true", help="Don't open a browser automatically."
+        )
+        gui.set_defaults(func=cmd_gui, path=path)
 
     args = parser.parse_args()
     logging.basicConfig(
