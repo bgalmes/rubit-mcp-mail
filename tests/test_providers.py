@@ -1,6 +1,21 @@
+from pathlib import Path
+
 import pytest
 
-from rubit_mcp_mail.providers import PROFILES, apply_overrides, get_profile
+from rubit_mcp_mail.providers import (
+    PROFILES,
+    THUNDERBIRD_CLIENT_ID,
+    apply_overrides,
+    get_profile,
+)
+
+
+class TestThunderbirdClientId:
+    def test_matches_the_one_documented_in_the_readme(self):
+        # The setup wizard offers this as the default, so the constant and the
+        # README instructions must not drift apart.
+        readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+        assert THUNDERBIRD_CLIENT_ID in readme
 
 
 class TestApplyOverrides:

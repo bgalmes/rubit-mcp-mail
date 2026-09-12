@@ -17,7 +17,7 @@ from imapclient.exceptions import LoginError
 from ..config import Account
 from ..providers import MicrosoftOAuth
 from ..secrets import SecretStore
-from .base import NeedsAuthError
+from .base import AuthUI, ConsoleAuthUI, NeedsAuthError
 
 log = logging.getLogger(__name__)
 
@@ -112,7 +112,8 @@ class MicrosoftDeviceCodeAuth:
                 "'Office 365 Exchange Online'",
             ) from exc
 
-    def interactive_setup(self) -> str:
+    def interactive_setup(self, ui: AuthUI | None = None) -> str:
+        ui = ui or ConsoleAuthUI()
         cache = self._load_cache()
         app = self._app(cache)
 
@@ -125,10 +126,7 @@ class MicrosoftDeviceCodeAuth:
                 "'Allow public client flows' enabled."
             )
 
-        print()
-        print(flow["message"])
-        print()
-        print("Waiting for you to complete sign-in in the browser...")
+        ui.device_code(flow)
 
         result = app.acquire_token_by_device_flow(flow)  # blocks until done/expired
         self._save_cache(cache)
