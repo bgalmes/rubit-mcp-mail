@@ -36,13 +36,22 @@ class PasswordAuth:
         except LoginError as exc:
             raise NeedsAuthError(self._account.name, f"server rejected login: {exc}") from exc
 
-    def interactive_setup(self, ui: AuthUI | None = None) -> str:
-        ui = ui or ConsoleAuthUI()
-        password = ui.ask_password(self._account).strip()
+    def store_password(self, password: str) -> str:
+        """Persist an app password from any front end. Returns where it landed.
+
+        Split out of `interactive_setup` so a caller that cannot prompt - the
+        web GUI, which receives the password in a form POST rather than pulling
+        it from a terminal - still stores it through the one SecretStore path.
+        """
+        password = (password or "").strip()
         if not password:
             raise ValueError("No password entered; nothing stored.")
-        where = self._store.set(self.secret_key, password)
-        return f"Password stored in {where}."
+        return f"Password stored in {self._store.set(self.secret_key, password)}."
+
+    def interactive_setup(self, ui: AuthUI | None = None) -> str:
+        """Pull a password from `ui` (the terminal by default) and store it."""
+        ui = ui or ConsoleAuthUI()
+        return self.store_password(ui.ask_password(self._account))
 
     def status(self) -> tuple[str, str | None]:
         if self._password():

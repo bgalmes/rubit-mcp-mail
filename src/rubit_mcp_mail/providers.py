@@ -31,8 +31,9 @@ class ImapProfile(BaseModel):
 # Thunderbird's public client ID. Multi-tenant and already granted
 # IMAP.AccessAsUser.All, so device-code sign-in works with it immediately - the
 # fallback for users who can't register their own Azure app (see the README).
-# The setup wizard offers it as the default; keeping the literal here rather
-# than only in prose means the two can't drift apart.
+# The setup wizard offers it as the default and the config GUI offers it on the
+# account form; keeping the literal here rather than only in prose means the
+# three can't drift apart.
 THUNDERBIRD_CLIENT_ID = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"
 
 PROFILES: dict[str, ImapProfile] = {

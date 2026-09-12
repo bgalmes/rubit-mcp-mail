@@ -9,6 +9,7 @@ only ever acquires tokens silently.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 import msal
 from imapclient import IMAPClient
@@ -20,6 +21,34 @@ from ..secrets import SecretStore
 from .base import AuthUI, ConsoleAuthUI, NeedsAuthError
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class DeviceFlow:
+    """A started device-code flow, waiting for the user to type the code.
+
+    Carries the MSAL app and cache alongside the flow dict because the blocking
+    half of the handshake must finish into the *same* cache the first half
+    created, whether the two halves are a print and a getpass or two HTTP
+    requests.
+    """
+
+    flow: dict
+    app: msal.PublicClientApplication
+    cache: msal.SerializableTokenCache
+
+    @property
+    def message(self) -> str:
+        """MSAL's own instructions: the code, and where to type it."""
+        return self.flow.get("message", "")
+
+    @property
+    def user_code(self) -> str:
+        return self.flow.get("user_code", "")
+
+    @property
+    def verification_uri(self) -> str:
+        return self.flow.get("verification_uri") or self.flow.get("verification_url") or ""
 
 
 class MicrosoftDeviceCodeAuth:
@@ -112,8 +141,8 @@ class MicrosoftDeviceCodeAuth:
                 "'Office 365 Exchange Online'",
             ) from exc
 
-    def interactive_setup(self, ui: AuthUI | None = None) -> str:
-        ui = ui or ConsoleAuthUI()
+    def begin_device_flow(self) -> DeviceFlow:
+        """Ask Microsoft for a device code. Returns immediately; nothing blocks yet."""
         cache = self._load_cache()
         app = self._app(cache)
 
@@ -125,11 +154,12 @@ class MicrosoftDeviceCodeAuth:
                 "Most often this means the Azure app registration does not have "
                 "'Allow public client flows' enabled."
             )
+        return DeviceFlow(flow=flow, app=app, cache=cache)
 
-        ui.device_code(flow)
-
-        result = app.acquire_token_by_device_flow(flow)  # blocks until done/expired
-        self._save_cache(cache)
+    def complete_device_flow(self, started: DeviceFlow) -> str:
+        """Block until the user finishes signing in (or the code expires)."""
+        result = started.app.acquire_token_by_device_flow(started.flow)
+        self._save_cache(started.cache)
 
         if "access_token" not in result:
             error = result.get("error_description") or result.get("error") or str(result)
@@ -143,6 +173,18 @@ class MicrosoftDeviceCodeAuth:
                 "or IMAP login will fail."
             )
         return f"Signed in as {signed_in or self._account.email}. Token cached."
+
+    def interactive_setup(self, ui: AuthUI | None = None) -> str:
+        """Show the code through `ui` (the terminal by default), then block.
+
+        Front ends that cannot block for the whole handshake - the web GUI,
+        which has to answer the HTTP request that started it - drive
+        `begin_device_flow` and `complete_device_flow` themselves instead.
+        """
+        ui = ui or ConsoleAuthUI()
+        started = self.begin_device_flow()
+        ui.device_code(started.flow)
+        return self.complete_device_flow(started)
 
     def status(self) -> tuple[str, str | None]:
         try:

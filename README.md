@@ -86,22 +86,55 @@ failing silently. This is meant for future write tools (send, mark as
 read/unread, etc.) that don't exist yet, but it works against today's
 read-only tools too — for example to keep attachments off a shared account.
 
-Rather than editing TOML by hand, run:
-
-```bash
-rubit-mcp-mail permissions
-```
-
-This opens a small local web page (bound to `127.0.0.1` only — no
-authentication, same trust model as `python -m http.server`) listing every
-configured account with a checkbox per tool; unchecking one and saving writes
-`disabled_tools` back into `config.toml`, leaving every other line, comment,
-and ordering untouched. Use `--port` to pick a fixed port and `--no-browser`
-to skip auto-opening one.
+Rather than editing TOML by hand, run `rubit-mcp-mail permissions` — it opens
+[the GUI](#the-gui) directly on the permissions page, a grid of accounts and
+tools where unchecking a box and saving writes `disabled_tools` back into
+`config.toml`.
 
 **A `serve` process caches its config on first read**, so toggling a
 permission here does not affect a *running* MCP server (e.g. one launched by
 Claude Desktop) until it is restarted.
+
+## The GUI
+
+[Quick install](#quick-install) and `rubit-mcp-mail install` cover first-time
+setup. For everything after that — a second mailbox, a typo'd `client_id`, a
+changed download directory — this is the editor, and everything in
+`config.toml` can be managed from a local web page instead of a text editor:
+
+```bash
+rubit-mcp-mail gui
+```
+
+It prints a URL (and opens your browser at it) with pages to:
+
+- **See every account at a glance** — provider, server, and whether it is signed
+  in, with the same diagnosis `doctor` gives.
+- **Add, edit, and remove accounts** — pick Outlook or any other IMAP server,
+  fill in the fields, and the form is validated before anything is written. The
+  Outlook page offers Thunderbird's shared client ID for accounts that
+  [can't register their own Azure app](#cant-register-your-own-app).
+- **Sign in** — the password prompt for app-password providers, and the full
+  device-code flow for Outlook, without dropping to a terminal. Credentials go
+  to the same keyring (or `0600` file) the CLI uses; the config file never
+  holds a secret.
+- **Set the download directory** and the per-account tool permissions.
+- **Edit provider overrides** — the `[providers.*]` tables described under
+  [If Microsoft changes their endpoints](#if-microsoft-changes-their-endpoints),
+  without writing TOML table syntax.
+- **Run doctor** and read the result in the page.
+
+It reads and writes the very same file the CLI and server use, through the same
+parser: a hand-edited config opens correctly in the GUI, saving one account
+leaves every other line, comment and ordering untouched, and a change that
+would not load is refused rather than written. Use `--port` for a fixed port
+and `--no-browser` to skip opening one.
+
+**On access:** the page binds to `127.0.0.1` only, and the URL it prints carries
+a random token minted at startup (exchanged for a session cookie on first
+load). Requests without it are refused, as are requests arriving under a
+non-loopback hostname or a form posted from another site. Open the URL as
+printed; the token is what keeps other pages in your browser out.
 
 ## Install
 
@@ -132,9 +165,10 @@ rubit_mcp_mail` if you'd rather not depend on the `.exe` shim). For example:
 ```
 
 The config file lives at `%USERPROFILE%\.config\rubit-mcp-mail\config.toml`
-— `Path.home() / ".config"` resolves there on Windows too, so create it the
-same way the [Configure](#2-configure) section shows, just with `mkdir` and a
-text editor instead of the `cat` heredoc:
+— `Path.home() / ".config"` resolves there on Windows too. The simplest way to
+create it is `.venv\Scripts\rubit-mcp-mail.exe gui`, which writes the file for
+you; to do it by hand, use `mkdir` and a text editor instead of the `cat`
+heredoc the [Configure](#2-configure) section shows:
 
 ```powershell
 mkdir $env:USERPROFILE\.config\rubit-mcp-mail
@@ -194,6 +228,11 @@ org policies don't govern.
 
 ### 2. Configure
 
+Two ways avoid writing this by hand: `rubit-mcp-mail install` walks a first-time
+setup end to end (config, sign-in, and registering with Claude), and
+`rubit-mcp-mail gui` opens [the config editor](#the-gui) for this and every
+later change. By hand it is:
+
 ```bash
 mkdir -p ~/.config/rubit-mcp-mail
 cat > ~/.config/rubit-mcp-mail/config.toml <<'EOF'
@@ -217,7 +256,8 @@ fallback on headless machines).
 
 This prints a code and a URL; approve in your browser. The refresh token is
 cached, so this is a one-time step — the server itself only ever refreshes
-silently and never prompts.
+silently and never prompts. The same flow runs in the GUI if you would rather
+not use a terminal.
 
 ### 4. Verify
 
@@ -269,13 +309,15 @@ authority = "https://login.microsoftonline.com/common"
 scopes = ["https://outlook.office.com/IMAP.AccessAsUser.All"]
 ```
 
-Only include the keys you actually need to change. `rubit-mcp-mail doctor`
-prints a line naming any overrides currently in effect. This works for any
+Only include the keys you actually need to change; the GUI's Providers page
+writes the same table from a form. `rubit-mcp-mail doctor` prints a line naming
+any overrides currently in effect. This works for any
 provider, not just Outlook — `port` and `ssl` are overridable too.
 
 ## Other providers
 
-Anything that speaks IMAP with an app password:
+Anything that speaks IMAP with an app password. Add it in [the GUI](#the-gui),
+or by hand:
 
 ```toml
 [accounts.personal]
@@ -285,7 +327,8 @@ host     = "imap.fastmail.com"
 # port   = 993   (default)
 ```
 
-Then `rubit-mcp-mail auth personal` and paste the app password. Known hosts:
+Then `rubit-mcp-mail auth personal` and paste the app password (or do both from
+the GUI). Known hosts:
 Gmail `imap.gmail.com`, Fastmail `imap.fastmail.com`,
 iCloud `imap.mail.me.com`, Yahoo `imap.mail.yahoo.com`.
 Gmail and iCloud require an app-specific password, not your login password.
@@ -418,15 +461,17 @@ so the installer itself can be deleted afterwards.
 ```
 src/rubit_mcp_mail/
   server.py        MCP tool definitions
-  __main__.py      CLI: serve | auth | doctor | permissions | install
+  __main__.py      CLI: serve | install | auth | doctor | gui
   installer.py     setup wizard: writes config, signs in, registers with Claude
   installer_gui.py the setup window (tkinter), falling back to the terminal
   claude_registration.py  claude_desktop_config.json / `claude mcp add`
   session.py       wires config + auth + backend; attachment path safety
   config.py        TOML config -> Account models
+  diagnostics.py   the doctor checks, as data (shared by the CLI and the GUI)
   permissions.py   registry of per-account-toggleable tool names
-  permissions_editor.py  pure logic for editing disabled_tools in config.toml
-  webui.py         local web GUI for the `permissions` command
+  config_editor.py every write to config.toml: comment-preserving, validated
+  webui.py         local web GUI: routing and access control
+  webui_pages.py   local web GUI: HTML
   providers.py     provider profile registry
   secrets.py       keyring with 0600-file fallback
   models.py        pydantic models + message handles
