@@ -12,6 +12,7 @@ are touched exclusively from `_drain_events`, which runs on the main thread.
 from __future__ import annotations
 
 import queue
+import subprocess
 import threading
 import webbrowser
 from pathlib import Path
@@ -312,6 +313,15 @@ class Wizard:
             entry.bind("<Return>", lambda _e: self._on_next())
             self._set_buttons(next_text="Sign in", next_on=True, back_on=True)
 
+    def _open_settings(self) -> None:
+        """Launch the installed GUI executable and leave setup behind."""
+        try:
+            subprocess.Popen([str(self._gui_path), "gui"], close_fds=True)
+        except OSError as exc:
+            self.var_status.set(f"Could not open the settings window ({exc}).")
+            return
+        self.root.destroy()
+
     def _copy_code(self) -> None:
         self.root.clipboard_clear()
         self.root.clipboard_append(self._device_code)
@@ -344,7 +354,17 @@ class Wizard:
         lines.append(f"Secrets: {result.secret_backend}")
         if result.server_path:
             lines.append(f"Server:  {result.server_path}")
+        if result.gui_path:
+            lines.append(f"Settings: {result.gui_path}")
         lines.extend(result.notes)
+
+        # Closes the loop the whole task is about: setup finishes and the user
+        # can open their settings from here, without ever meeting a terminal.
+        if result.gui_path:
+            self._gui_path = result.gui_path
+            ttk.Button(self.body, text="Open settings", command=self._open_settings).pack(
+                anchor="w", pady=(0, 8)
+            )
 
         wrapper = ttk.Frame(self.body)
         wrapper.pack(fill="both", expand=True)

@@ -39,9 +39,9 @@ class PasswordAuth:
     def store_password(self, password: str) -> str:
         """Persist an app password from any front end. Returns where it landed.
 
-        Split out of `interactive_setup` so a caller that cannot prompt - the
-        web GUI, which receives the password in a form POST rather than pulling
-        it from a terminal - still stores it through the one SecretStore path.
+        Split out of `interactive_setup` so a caller that has already collected
+        it - the settings window, which reads it from an entry box rather than
+        a terminal - still stores it through the one SecretStore path.
         """
         password = (password or "").strip()
         if not password:
