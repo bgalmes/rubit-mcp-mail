@@ -40,7 +40,9 @@ jobs:
         run: |
           semantic-release version --no-commit --no-tag --no-push --no-vcs-release
 
-          if git diff --quiet -- pyproject.toml CHANGELOG.md; then
+          # python-semantic-release stages these files (git add) even with
+          # --no-commit, so the diff to check is against HEAD, not the index.
+          if git diff --quiet HEAD -- pyproject.toml CHANGELOG.md; then
             echo "Nothing to promote - already stable."
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
