@@ -1,0 +1,50 @@
+name: Auto release
+
+# Every push to main (i.e. every merged PR) computes the next semantic
+# version from the Conventional Commits made since the last release and
+# publishes it as a GitHub *prerelease*, e.g. 1.3.0-rc.1, then 1.3.0-rc.2 on
+# the next merge, and so on. Nothing here is ever "final" - see
+# promote-release.yml for that manual step. release.yml (triggered on
+# `release: published`) then builds and attaches the installers to whatever
+# gets published here, prerelease or not, unchanged.
+#
+# If there is nothing releasable since the last tag (no feat/fix/breaking
+# commits), python-semantic-release exits cleanly without creating a commit,
+# tag, or release.
+on:
+  push:
+    branches: [main]
+
+# Pushes/tags made with the default GITHUB_TOKEN don't trigger further
+# workflow runs, so this job's own version-bump commit does not cause a
+# second run of this workflow. The commit message also carries [skip ci] as
+# a second line of defense, in case this is ever switched to a PAT.
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install python-semantic-release
+        run: python -m pip install --upgrade pip "python-semantic-release>=10,<11"
+
+      # Bumps pyproject.toml's version, updates CHANGELOG.md, commits, tags,
+      # pushes, and publishes a GitHub prerelease - all in one step, per the
+      # [tool.semantic_release] config in pyproject.toml.
+      - name: Compute, tag and publish the next prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release version --as-prerelease --prerelease-token rc

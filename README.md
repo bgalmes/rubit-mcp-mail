@@ -465,6 +465,34 @@ executable into `~/.local/share/rubit-mcp-mail/bin`
 (`%LOCALAPPDATA%\Programs\rubit-mcp-mail` on Windows) and registers that path,
 so the installer itself can be deleted afterwards.
 
+### Releasing
+
+Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/):
+the type prefix on each commit reaching `main` decides the next version.
+
+- `fix: ...` → patch release
+- `feat: ...` → minor release
+- `feat!: ...`, `fix!: ...`, or a `BREAKING CHANGE:` footer → major release
+- `chore:`, `docs:`, `refactor:`, `test:`, `ci:`, etc. → no release by themselves
+
+Versioning is handled by [`python-semantic-release`](https://python-semantic-release.readthedocs.io/),
+configured in `pyproject.toml`, across two workflows:
+
+- **`.github/workflows/auto-release.yml`** runs on every push to `main`. It
+  computes the next version from the commits since the last release, bumps
+  `version` in `pyproject.toml`, updates `CHANGELOG.md` (grouped into
+  Features / Bug Fixes / Breaking Changes), tags the commit, and publishes a
+  GitHub **prerelease** — `1.3.0-rc.1`, then `1.3.0-rc.2` on the next merge,
+  and so on. `release.yml` then builds and attaches the installers to it, so
+  every RC ships real, testable binaries. A push with nothing releasable
+  (only `chore:`/`docs:`/etc. commits) is a no-op — no commit, tag, or
+  release is created.
+- **`.github/workflows/promote-release.yml`** is triggered manually
+  (`workflow_dispatch`, from the Actions tab) once an RC has been vetted. It
+  cuts the same version without the `-rc.N` suffix — `1.3.0` — as the final,
+  stable release. Nothing is "final" just because it merged to `main`; a
+  human decides when to promote.
+
 ## Layout
 
 ```
