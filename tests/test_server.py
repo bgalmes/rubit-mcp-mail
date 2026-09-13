@@ -8,7 +8,9 @@ from rubit_mcp_mail.session import Session
 
 @pytest.fixture
 def session(tmp_path):
-    account = Account(name="x", provider="generic", email="a@b.c", host="h", disabled_tools=["list_folders"])
+    account = Account(
+        name="x", provider="generic", email="a@b.c", host="h", disabled_tools=["list_folders"]
+    )
     return Session(config=Config(accounts={"x": account}), store=SecretStore(tmp_path / "s.json"))
 
 
@@ -28,7 +30,9 @@ class TestGuarded:
         assert result == "Error: 'list_folders' is disabled for account 'x'"
 
     def test_enabled_tool_is_not_blocked(self, use_session, monkeypatch):
-        monkeypatch.setattr(use_session, "backend", lambda _name: (_ for _ in ()).throw(RuntimeError("reached")))
+        monkeypatch.setattr(
+            use_session, "backend", lambda _name: (_ for _ in ()).throw(RuntimeError("reached"))
+        )
         result = server.list_messages(account="x")
         assert result == "Error: reached"
 
