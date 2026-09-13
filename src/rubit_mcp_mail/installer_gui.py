@@ -274,7 +274,7 @@ class Wizard:
 
     # -- page 3: signing in ----------------------------------------------
     def show_signin(self) -> None:
-        ttk = self._ttk
+        tk, ttk = self._tk, self._ttk
         self._page = "signin"
         plan = self._current_plan()
         if plan.provider == "outlook":
@@ -296,6 +296,21 @@ class Wizard:
                 row, text="Open sign-in page", command=self._open_verification, state="disabled"
             )
             self._btn_open.pack(side="left", padx=(8, 0))
+            # Opening a browser from the GUI process is unreliable under WSL and
+            # similar setups, so the link is always shown as plain, selectable
+            # text too: a fallback the user can copy into any browser by hand.
+            ttk.Label(self.body, text="If that doesn't open a browser, use this link:").pack(
+                anchor="w", pady=(10, 2)
+            )
+            link_row = ttk.Frame(self.body)
+            link_row.pack(fill="x", pady=(0, 4))
+            self.var_url = tk.StringVar(value="Waiting for the sign-in link…")
+            self._url_entry = ttk.Entry(link_row, textvariable=self.var_url, state="readonly")
+            self._url_entry.pack(side="left", fill="x", expand=True)
+            self._btn_copy_link = ttk.Button(
+                link_row, text="Copy link", command=self._copy_link, state="disabled"
+            )
+            self._btn_copy_link.pack(side="left", padx=(8, 0))
             self._verification_url = ""
             self._device_code = ""
             self._set_buttons(next_text="Next", next_on=False, back_on=False)
@@ -330,6 +345,11 @@ class Wizard:
     def _open_verification(self) -> None:
         if self._verification_url:
             webbrowser.open(self._verification_url)
+
+    def _copy_link(self) -> None:
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self._verification_url)
+        self.var_status.set("Link copied to the clipboard.")
 
     # -- page 4: the result ----------------------------------------------
     def show_finish(self, result: SetupResult) -> None:
@@ -449,6 +469,8 @@ class Wizard:
         self._code_label.configure(text=self._device_code or "?")
         self._btn_copy.configure(state="normal")
         self._btn_open.configure(state="normal")
+        self.var_url.set(self._verification_url or "(no sign-in link received)")
+        self._btn_copy_link.configure(state="normal" if self._verification_url else "disabled")
         self.var_status.set("Waiting for you to approve the sign-in…")
         if self._verification_url:
             webbrowser.open(self._verification_url)
