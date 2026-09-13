@@ -465,6 +465,49 @@ executable into `~/.local/share/rubit-mcp-mail/bin`
 (`%LOCALAPPDATA%\Programs\rubit-mcp-mail` on Windows) and registers that path,
 so the installer itself can be deleted afterwards.
 
+### Releasing
+
+Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/):
+the type prefix on each commit reaching `main` decides the next version.
+
+- `fix: ...` → patch release
+- `feat: ...` → minor release
+- `feat!: ...`, `fix!: ...`, or a `BREAKING CHANGE:` footer → major release
+- `chore:`, `docs:`, `refactor:`, `test:`, `ci:`, etc. → no release by themselves
+
+Versioning is handled by [`python-semantic-release`](https://python-semantic-release.readthedocs.io/),
+configured in `pyproject.toml`, across three workflows. `main` requires a pull
+request for every change, so nothing pushes a version bump straight to it —
+instead a small bot-managed PR carries the bump, and merging *that* PR is what
+actually cuts the release:
+
+- **`.github/workflows/auto-release.yml`** runs on every push to `main`. It
+  computes the next version from the commits since the last release, and
+  opens (or updates) a `release/next` PR containing just the `version` bump
+  in `pyproject.toml` and the `CHANGELOG.md` update (grouped into Features /
+  Bug Fixes / Breaking Changes), with auto-merge turned on. A push with
+  nothing releasable (only `chore:`/`docs:`/etc. commits, or the release PR's
+  own merge) is a no-op — no branch, PR, or commit is created.
+- **`.github/workflows/publish-release.yml`** runs when that `release/next`
+  PR merges. Since branch protection only blocks pushes to the `main`
+  *branch*, not tags, it tags the merge commit and publishes it as a GitHub
+  **prerelease** — `1.3.0-rc.1`, then `1.3.0-rc.2` on the next merge, and so
+  on. `release.yml` then builds and attaches the installers to it, so every
+  RC ships real, testable binaries.
+- **`.github/workflows/promote-release.yml`** is triggered manually
+  (`workflow_dispatch`, from the Actions tab) once an RC has been vetted. It
+  opens a `release/promote` PR the same way, computing the same version
+  without the `-rc.N` suffix — `1.3.0`; merging it triggers
+  `publish-release.yml` again, this time publishing the final, stable
+  release. Nothing is "final" just because it merged to `main`; a human
+  decides when to promote.
+
+This needs **"Allow auto-merge"** enabled under repo Settings → General →
+Pull Requests, so the release PRs can merge themselves once checks pass. If
+`main`'s branch protection requires an approving review, auto-merge just
+waits for one — a human approves the release PR once, and the merge (and the
+release it triggers) follows automatically.
+
 ## Layout
 
 ```

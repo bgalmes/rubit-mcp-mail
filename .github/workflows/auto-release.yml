@@ -1,0 +1,83 @@
+name: Prepare release
+
+# main requires a pull request for every change (no direct pushes allowed),
+# so this can't just push a version-bump commit straight to main. Instead,
+# every push to main computes the next semantic version from the
+# Conventional Commits made since the last release and opens (or updates) a
+# small PR carrying just the pyproject.toml version bump and CHANGELOG.md
+# update, with auto-merge turned on. publish-release.yml tags the commit and
+# publishes the GitHub prerelease once that PR lands - see the "Releasing"
+# section of the README for the full flow.
+#
+# A push with nothing releasable (only chore:/docs:/etc. commits, or the
+# release PR's own merge) is a no-op: no branch, PR, or commit is created.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-prep
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install python-semantic-release
+        run: python -m pip install --upgrade pip "python-semantic-release>=10,<11"
+
+      # Writes the bumped version + changelog into the working tree without
+      # committing/tagging/pushing/releasing - those happen once a human (or
+      # auto-merge) actually lands the PR this opens below.
+      - name: Compute the next prerelease version
+        id: version
+        run: |
+          semantic-release version --as-prerelease --prerelease-token rc \
+            --no-commit --no-tag --no-push --no-vcs-release
+
+          if git diff --quiet -- pyproject.toml CHANGELOG.md; then
+            echo "No releasable changes since the last release."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the release PR
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B release/next
+          git add pyproject.toml CHANGELOG.md
+          git commit -m "chore(release): ${VERSION}"
+          git push --force origin release/next
+
+          existing="$(gh pr list --head release/next --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "chore(release): ${VERSION}"
+            pr_number="$existing"
+          else
+            pr_url="$(gh pr create --head release/next --base main \
+              --title "chore(release): ${VERSION}" \
+              --body "Automated prerelease prep. Merging this PR publishes GitHub prerelease \`v${VERSION}\`.")"
+            pr_number="${pr_url##*/}"
+          fi
+          gh pr merge "$pr_number" --squash --auto

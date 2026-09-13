@@ -1,0 +1,76 @@
+name: Promote to stable
+
+# Manual promotion, mirroring auto-release.yml: computes the final,
+# non-prerelease version for whatever is currently on main (main's branch
+# config in pyproject.toml defaults to `prerelease = false`, so this drops
+# the `-rc.N` suffix the same way promoting always has), and opens a PR with
+# auto-merge enabled rather than pushing directly, since main requires a
+# pull request for every change. publish-release.yml tags and publishes the
+# final release once that PR lands. A human decides when to run this;
+# nothing here fires on its own.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-promote
+  cancel-in-progress: true
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install python-semantic-release
+        run: python -m pip install --upgrade pip "python-semantic-release>=10,<11"
+
+      - name: Compute the final stable version
+        id: version
+        run: |
+          semantic-release version --no-commit --no-tag --no-push --no-vcs-release
+
+          if git diff --quiet -- pyproject.toml CHANGELOG.md; then
+            echo "Nothing to promote - already stable."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the promotion PR
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B release/promote
+          git add pyproject.toml CHANGELOG.md
+          git commit -m "chore(release): ${VERSION}"
+          git push --force origin release/promote
+
+          existing="$(gh pr list --head release/promote --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "chore(release): ${VERSION}"
+            pr_number="$existing"
+          else
+            pr_url="$(gh pr create --head release/promote --base main \
+              --title "chore(release): ${VERSION}" \
+              --body "Automated promotion to stable. Merging this PR publishes the final release \`v${VERSION}\`.")"
+            pr_number="${pr_url##*/}"
+          fi
+          gh pr merge "$pr_number" --squash --auto

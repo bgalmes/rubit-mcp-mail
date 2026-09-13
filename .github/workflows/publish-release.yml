@@ -1,0 +1,51 @@
+name: Publish release
+
+# Fires when one of the bot-managed release PRs (opened by auto-release.yml
+# or promote-release.yml) merges into main. That merge is the point where
+# main actually carries the new version - branch protection only blocks
+# direct pushes to the main *branch*, not tags, so this job just tags the
+# merge commit and publishes the corresponding GitHub release: a prerelease
+# for release/next, a final release for release/promote.
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      (github.event.pull_request.head.ref == 'release/next' ||
+       github.event.pull_request.head.ref == 'release/promote')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install python-semantic-release
+        run: python -m pip install --upgrade pip "python-semantic-release>=10,<11"
+
+      # pyproject.toml/CHANGELOG.md already carry the right version from the
+      # merged PR, so --no-commit here: this run only needs to reach the
+      # same version number again (from the same commit history) in order to
+      # tag it, push the tag, and publish the release.
+      - name: Tag and publish the prerelease
+        if: github.event.pull_request.head.ref == 'release/next'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release version --as-prerelease --prerelease-token rc --no-commit
+
+      - name: Tag and publish the final release
+        if: github.event.pull_request.head.ref == 'release/promote'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release version --no-commit

@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pyright>=1.1", "ruff>=0.6"]
+dev = ["pytest>=8", "pyright>=1.1", "ruff>=0.6", "python-semantic-release>=10,<11"]
 # Only needed to build the downloadable installers (see .github/workflows/release.yml).
 # hooks-contrib carries the keyring hook: without it, keyring's backends are
 # discovered through entry points that a frozen bundle does not have.
@@ -44,3 +44,35 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.format]
+
+# See .github/workflows/auto-release.yml and promote-release.yml, and the
+# "Releasing" section of the README, for how these get used. `allow_zero_version`
+# keeps versions in the 0.x range until a deliberate 1.0.0 breaking change;
+# without it every release would jump straight to 1.0.0.
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/rubit_mcp_mail/__init__.py:__version__"]
+commit_parser = "conventional"
+commit_author = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+commit_message = "chore(release): {version} [skip ci]"
+major_on_zero = true
+allow_zero_version = true
+tag_format = "v{version}"
+
+# Every merge to main is published as a `-rc.N` prerelease; promote-release.yml
+# is what drops the suffix for a final release (see the README).
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+prerelease_token = "rc"
+
+[tool.semantic_release.changelog]
+mode = "update"
+exclude_commit_patterns = ["^chore\\(release\\):"]
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+output_format = "md"
+
+[tool.semantic_release.remote]
+type = "github"
