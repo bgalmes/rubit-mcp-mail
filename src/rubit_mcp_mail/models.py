@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from datetime import datetime
 from typing import Literal
 
@@ -31,15 +32,19 @@ class MessageHandle(BaseModel):
     uid: int
 
     def encode(self) -> str:
-        raw = f"{self.account}\x1f{self.folder}\x1f{self.uidvalidity}\x1f{self.uid}"
-        return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
+        # A JSON array (not a control-character-delimited string) so the bytes
+        # going into base64 are all plain ASCII - some MCP clients mangle raw
+        # control characters when a handle round-trips through their display
+        # or context layer before the model retypes it into the next call.
+        raw = json.dumps([self.account, self.folder, self.uidvalidity, self.uid])
+        return base64.urlsafe_b64encode(raw.encode("ascii")).decode("ascii").rstrip("=")
 
     @classmethod
     def decode(cls, handle: str) -> MessageHandle:
         padded = handle + "=" * (-len(handle) % 4)
         try:
             raw = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
-            account, folder, uidvalidity, uid = raw.split("\x1f")
+            account, folder, uidvalidity, uid = json.loads(raw)
             return cls(
                 account=account,
                 folder=folder,
