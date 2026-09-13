@@ -76,6 +76,11 @@ class SecretStore:
 
     # -- introspection ---------------------------------------------------
     @property
+    def path(self) -> Path:
+        """Where the fallback file lives, regardless of whether it exists."""
+        return self._path
+
+    @property
     def backend_name(self) -> str:
         """Human-readable description of where secrets are read and written."""
         module, reason = self._resolve()

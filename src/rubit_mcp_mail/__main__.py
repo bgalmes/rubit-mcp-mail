@@ -49,6 +49,12 @@ def cmd_install(args: argparse.Namespace) -> int:
     return run(force_console=args.console)
 
 
+def cmd_uninstall(args: argparse.Namespace) -> int:
+    from .uninstaller_gui import run
+
+    return run(force_console=args.console)
+
+
 def cmd_auth(args: argparse.Namespace) -> int:
     session = Session()
     try:
@@ -159,6 +165,14 @@ def main() -> int:
         "--console", action="store_true", help="Use text prompts instead of a window."
     )
     install.set_defaults(func=cmd_install)
+
+    uninstall = sub.add_parser(
+        "uninstall", help="Remove everything the installer set up: config, secrets, shortcuts."
+    )
+    uninstall.add_argument(
+        "--console", action="store_true", help="Use text prompts instead of a window."
+    )
+    uninstall.set_defaults(func=cmd_uninstall)
 
     auth = sub.add_parser("auth", help="Sign in to an account (one-time, interactive).")
     auth.add_argument("account", nargs="?", help="Account name; optional if only one.")

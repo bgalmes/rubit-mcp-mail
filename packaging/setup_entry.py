@@ -1,17 +1,19 @@
 """PyInstaller entry point for the windowed executable.
 
-One binary does two jobs, because they need exactly the same things - Tk, the
-config editor, every sign-in flow - and building a second copy of the Python
-runtime to hold them again would double the download for nothing:
+One binary does three jobs, because they need exactly the same things - Tk,
+the config editor, every sign-in flow - and building further copies of the
+Python runtime to hold them again would multiply the download for nothing:
 
     (no arguments)      the setup wizard
     gui | permissions   the settings window
+    uninstall           the uninstaller
 
 Which one a user gets therefore depends only on how it was launched. The file
 they download runs the wizard when double-clicked, as it always has; the
-shortcut setup creates passes `gui`, so clicking that opens their settings.
-The installer copies itself to become that second one - see
-`installer.install_gui_binary`.
+shortcut setup creates passes `gui`, so clicking that opens their settings;
+the Windows "Add/Remove Programs" entry and the Linux uninstall shortcut
+setup creates both pass `uninstall`. The installer copies itself to become
+that second, installed copy - see `installer.install_gui_binary`.
 
 Separate from `cli_entry.py` because this half is windowed and that half is a
 console build Claude talks to over stdio. See cli_entry.py for why entry
@@ -28,6 +30,11 @@ def main() -> int:
         from rubit_mcp_mail.config_gui import run as run_gui
 
         return run_gui(page="permissions" if argument == "permissions" else "accounts")
+
+    if argument == "uninstall":
+        from rubit_mcp_mail.uninstaller_gui import run as run_uninstall
+
+        return run_uninstall()
 
     from rubit_mcp_mail.installer_gui import run
 
