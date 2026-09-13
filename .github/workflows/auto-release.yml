@@ -1,33 +1,30 @@
-name: Auto release
+name: Prepare release
 
-# Every push to main (i.e. every merged PR) computes the next semantic
-# version from the Conventional Commits made since the last release and
-# publishes it as a GitHub *prerelease*, e.g. 1.3.0-rc.1, then 1.3.0-rc.2 on
-# the next merge, and so on. Nothing here is ever "final" - see
-# promote-release.yml for that manual step. release.yml (triggered on
-# `release: published`) then builds and attaches the installers to whatever
-# gets published here, prerelease or not, unchanged.
+# main requires a pull request for every change (no direct pushes allowed),
+# so this can't just push a version-bump commit straight to main. Instead,
+# every push to main computes the next semantic version from the
+# Conventional Commits made since the last release and opens (or updates) a
+# small PR carrying just the pyproject.toml version bump and CHANGELOG.md
+# update, with auto-merge turned on. publish-release.yml tags the commit and
+# publishes the GitHub prerelease once that PR lands - see the "Releasing"
+# section of the README for the full flow.
 #
-# If there is nothing releasable since the last tag (no feat/fix/breaking
-# commits), python-semantic-release exits cleanly without creating a commit,
-# tag, or release.
+# A push with nothing releasable (only chore:/docs:/etc. commits, or the
+# release PR's own merge) is a no-op: no branch, PR, or commit is created.
 on:
   push:
     branches: [main]
 
-# Pushes/tags made with the default GITHUB_TOKEN don't trigger further
-# workflow runs, so this job's own version-bump commit does not cause a
-# second run of this workflow. The commit message also carries [skip ci] as
-# a second line of defense, in case this is ever switched to a PAT.
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
-  group: auto-release
-  cancel-in-progress: false
+  group: release-prep
+  cancel-in-progress: true
 
 jobs:
-  release:
+  prepare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,10 +38,46 @@ jobs:
       - name: Install python-semantic-release
         run: python -m pip install --upgrade pip "python-semantic-release>=10,<11"
 
-      # Bumps pyproject.toml's version, updates CHANGELOG.md, commits, tags,
-      # pushes, and publishes a GitHub prerelease - all in one step, per the
-      # [tool.semantic_release] config in pyproject.toml.
-      - name: Compute, tag and publish the next prerelease
+      # Writes the bumped version + changelog into the working tree without
+      # committing/tagging/pushing/releasing - those happen once a human (or
+      # auto-merge) actually lands the PR this opens below.
+      - name: Compute the next prerelease version
+        id: version
+        run: |
+          semantic-release version --as-prerelease --prerelease-token rc \
+            --no-commit --no-tag --no-push --no-vcs-release
+
+          if git diff --quiet -- pyproject.toml CHANGELOG.md; then
+            echo "No releasable changes since the last release."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the release PR
+        if: steps.version.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release version --as-prerelease --prerelease-token rc
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B release/next
+          git add pyproject.toml CHANGELOG.md
+          git commit -m "chore(release): ${VERSION}"
+          git push --force origin release/next
+
+          existing="$(gh pr list --head release/next --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "chore(release): ${VERSION}"
+            pr_number="$existing"
+          else
+            pr_url="$(gh pr create --head release/next --base main \
+              --title "chore(release): ${VERSION}" \
+              --body "Automated prerelease prep. Merging this PR publishes GitHub prerelease \`v${VERSION}\`.")"
+            pr_number="${pr_url##*/}"
+          fi
+          gh pr merge "$pr_number" --squash --auto
