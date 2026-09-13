@@ -28,6 +28,22 @@ def claude_code_available() -> bool:
     return shutil.which("claude") is not None
 
 
+def unregister_claude_code(*, name: str = SERVER_NAME) -> tuple[bool, str]:
+    """Remove `name` from Claude Code. Returns (ok, output).
+
+    The caller is expected to gate this on `claude_code_available()` first,
+    the same way `register_clients` does - there is nothing useful to report
+    from running a missing `claude` binary.
+    """
+    result = subprocess.run(
+        ["claude", "mcp", "remove", name, "--scope", "user"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0, (result.stdout + result.stderr).strip()
+
+
 def register_claude_code(server_path: Path, *, name: str = SERVER_NAME) -> tuple[bool, str]:
     """Register `server_path` with Claude Code. Returns (ok, output).
 
@@ -35,12 +51,7 @@ def register_claude_code(server_path: Path, *, name: str = SERVER_NAME) -> tuple
     add` fails when the name is already taken, and remove-then-add is idempotent
     without having to match on the CLI's error text, which we don't control.
     """
-    subprocess.run(
-        ["claude", "mcp", "remove", name, "--scope", "user"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    unregister_claude_code(name=name)
     result = subprocess.run(
         ["claude", "mcp", "add", name, "--scope", "user", "--", str(server_path), "serve"],
         capture_output=True,
@@ -160,6 +171,47 @@ def register_claude_desktop(
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(document, indent=2) + "\n"
     # Write beside the target so os.replace stays on one filesystem.
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".rubit-mcp-mail-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+    return path
+
+
+def unregister_claude_desktop(
+    *,
+    config_path: Path | None = None,
+    name: str = SERVER_NAME,
+) -> Path | None:
+    """Remove our entry from claude_desktop_config.json, leaving the rest alone.
+
+    Returns the path written to, or None when there was nothing to remove -
+    the file doesn't exist, or never had our entry in the first place. Mirrors
+    `register_claude_desktop`'s atomic-write dance so a half-written config
+    never breaks every other server Claude Desktop has configured.
+    """
+    path = config_path or claude_desktop_config_path()
+    if not path.exists():
+        return None
+
+    try:
+        document = json.loads(path.read_text("utf-8"))
+    except ValueError:
+        return None
+    if not isinstance(document, dict):
+        return None
+
+    servers = document.get("mcpServers")
+    if not isinstance(servers, dict) or name not in servers:
+        return None
+    del servers[name]
+    document["mcpServers"] = servers
+
+    text = json.dumps(document, indent=2) + "\n"
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".rubit-mcp-mail-", suffix=".json")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:

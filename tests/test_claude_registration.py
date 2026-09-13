@@ -150,6 +150,51 @@ class TestRegisterClaudeDesktop:
         assert [p.name for p in tmp_path.iterdir()] == ["claude_desktop_config.json"]
 
 
+class TestUnregisterClaudeDesktop:
+    def test_missing_file_is_a_noop(self, tmp_path):
+        path = tmp_path / "claude_desktop_config.json"
+        assert cr.unregister_claude_desktop(config_path=path) is None
+        assert not path.exists()
+
+    def test_removes_only_our_entry(self, tmp_path):
+        path = tmp_path / "claude_desktop_config.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "globalShortcut": "Ctrl+Space",
+                    "mcpServers": {
+                        "rubit-mail": {"command": str(SERVER), "args": ["serve"]},
+                        "other": {"command": "/usr/bin/other"},
+                    },
+                }
+            )
+        )
+        result = cr.unregister_claude_desktop(config_path=path)
+        assert result == path
+        document = json.loads(path.read_text())
+        assert document["globalShortcut"] == "Ctrl+Space"
+        assert document["mcpServers"] == {"other": {"command": "/usr/bin/other"}}
+
+    def test_nothing_to_remove_is_a_noop(self, tmp_path):
+        path = tmp_path / "claude_desktop_config.json"
+        path.write_text(json.dumps({"mcpServers": {"other": {"command": "/usr/bin/other"}}}))
+        before = path.read_text()
+        assert cr.unregister_claude_desktop(config_path=path) is None
+        assert path.read_text() == before
+
+    def test_unreadable_json_is_left_untouched(self, tmp_path):
+        path = tmp_path / "claude_desktop_config.json"
+        path.write_text("{ not json at all")
+        assert cr.unregister_claude_desktop(config_path=path) is None
+        assert path.read_text() == "{ not json at all"
+
+    def test_no_temp_file_is_left_behind(self, tmp_path):
+        path = tmp_path / "claude_desktop_config.json"
+        cr.register_claude_desktop(SERVER, needs_no_keyring=False, config_path=path)
+        cr.unregister_claude_desktop(config_path=path)
+        assert [p.name for p in tmp_path.iterdir()] == ["claude_desktop_config.json"]
+
+
 class TestRegisterClaudeCode:
     def test_removes_before_adding(self, monkeypatch):
         calls = []
@@ -185,3 +230,29 @@ class TestRegisterClaudeCode:
         monkeypatch.setattr(cr.subprocess, "run", lambda argv, **kw: Result())
         ok, output = cr.register_claude_code(SERVER)
         assert not ok and output == "boom"
+
+
+class TestUnregisterClaudeCode:
+    def test_removes_by_name(self, monkeypatch):
+        calls = []
+
+        class Result:
+            returncode = 0
+            stdout = "Removed"
+            stderr = ""
+
+        monkeypatch.setattr(cr.subprocess, "run", lambda argv, **kw: calls.append(argv) or Result())
+        ok, output = cr.unregister_claude_code()
+
+        assert ok and output == "Removed"
+        assert calls == [["claude", "mcp", "remove", "rubit-mail", "--scope", "user"]]
+
+    def test_a_failure_is_reported(self, monkeypatch):
+        class Result:
+            returncode = 1
+            stdout = ""
+            stderr = "no such server"
+
+        monkeypatch.setattr(cr.subprocess, "run", lambda argv, **kw: Result())
+        ok, output = cr.unregister_claude_code()
+        assert not ok and output == "no such server"

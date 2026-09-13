@@ -20,7 +20,7 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import claude_registration
+from . import claude_registration, uninstall_registry
 from .auth import build_auth
 from .auth.base import AuthUI
 from .config import Account, add_account, config_path, load_config
@@ -364,6 +364,7 @@ def apply_setup(
         # a checkout it is just the console script already on this machine.
         result.gui_path = executable if is_frozen() else None
         result.notes.extend(create_shortcuts(executable, arguments))
+        uninstall_registry.register(executable, install_dir or default_install_dir())
     except Exception as exc:  # noqa: BLE001
         result.notes.append(f"Could not install the settings window: {exc}")
 

@@ -58,8 +58,18 @@ class TestCreateLinux:
         shortcuts.create_shortcuts(GUI)
 
         entries = list((tmp_path / "applications").iterdir())
-        assert len(entries) == 1
-        assert "/old/" not in entries[0].read_text()
+        assert len(entries) == 2  # the settings entry and the uninstall entry
+        assert not any("/old/" in entry.read_text() for entry in entries)
+
+    def test_also_writes_an_uninstall_entry(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.setattr(shortcuts.shutil, "which", lambda _name: None)
+
+        shortcuts.create_shortcuts(GUI)
+
+        path = tmp_path / "applications" / f"{shortcuts.UNINSTALL_SHORTCUT_NAME}.desktop"
+        assert path.is_file()
+        assert f'Exec="{GUI}" uninstall' in path.read_text()
 
     def test_an_unwritable_directory_is_reported_not_raised(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
@@ -73,6 +83,42 @@ class TestCreateLinux:
         notes = shortcuts.create_shortcuts(GUI)
 
         assert any("Could not create the application menu entry" in note for note in notes)
+
+
+class TestRemoveLinux:
+    def test_removes_both_entries_and_the_icon(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.setattr(shortcuts.shutil, "which", lambda _name: None)
+        shortcuts.create_shortcuts(GUI)
+        apps = tmp_path / "applications"
+        assert list(apps.iterdir())  # something got created first
+
+        notes = shortcuts.remove_shortcuts()
+
+        assert list(apps.iterdir()) == []
+        assert any("removed" in note.lower() for note in notes)
+
+    def test_a_clean_machine_is_a_noop(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.setattr(shortcuts.shutil, "which", lambda _name: None)
+
+        notes = shortcuts.remove_shortcuts()
+
+        assert not any("removed" in note.lower() for note in notes)
+
+    def test_an_unremovable_entry_is_reported_not_raised(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.setattr(shortcuts.shutil, "which", lambda _name: None)
+        shortcuts.create_shortcuts(GUI)
+
+        def refuse(*_args, **_kwargs):
+            raise OSError("read-only file system")
+
+        monkeypatch.setattr(Path, "unlink", refuse)
+
+        notes = shortcuts.remove_shortcuts()
+
+        assert any("Could not remove" in note for note in notes)
 
 
 class TestWindowsScript:
@@ -95,6 +141,15 @@ class TestWindowsScript:
         assert "$link.Arguments = 'gui'" in script
 
 
+class TestWindowsRemovalScript:
+    def test_targets_the_same_name_and_both_folders(self):
+        script = shortcuts.windows_shortcut_removal_script()
+
+        assert f"{shortcuts.SHORTCUT_NAME}.lnk" in script
+        assert "'Programs', 'Desktop'" in script
+        assert "Remove-Item" in script
+
+
 class TestNeverRaises:
     def test_a_failure_becomes_a_note(self, monkeypatch):
         def explode(*_args, **_kwargs):
@@ -107,3 +162,15 @@ class TestNeverRaises:
         notes = shortcuts.create_shortcuts(GUI)
 
         assert notes == ["Could not create shortcuts (no desktop here)."]
+
+    def test_removal_failure_becomes_a_note(self, monkeypatch):
+        def explode(*_args, **_kwargs):
+            raise RuntimeError("no desktop here")
+
+        monkeypatch.setattr(shortcuts, "_remove_linux", explode)
+        monkeypatch.setattr(shortcuts, "_remove_windows", explode)
+        monkeypatch.setattr(shortcuts.sys, "platform", "linux")
+
+        notes = shortcuts.remove_shortcuts()
+
+        assert notes == ["Could not remove shortcuts (no desktop here)."]
