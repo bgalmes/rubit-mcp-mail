@@ -38,10 +38,9 @@ def cmd_serve(_args: argparse.Namespace) -> int:
 
 
 def cmd_gui(args: argparse.Namespace) -> int:
-    from .webui import serve
+    from .config_gui import run as run_gui
 
-    serve(port=args.port, open_browser=not args.no_browser, path=getattr(args, "path", "/"))
-    return 0
+    return run_gui(page=getattr(args, "page", "accounts"))
 
 
 def cmd_install(args: argparse.Namespace) -> int:
@@ -169,18 +168,11 @@ def main() -> int:
     doctor.add_argument("account", nargs="?", help="Only check this account.")
     doctor.set_defaults(func=cmd_doctor)
 
-    for name, help_text, path in (
-        ("gui", "Open a local web GUI to view and edit the config.", "/"),
-        ("permissions", "Open the GUI on the allow/forbid-tools page.", "/permissions"),
+    for name, help_text, page in (
+        ("gui", "Open the settings window to view and edit the config.", "accounts"),
+        ("permissions", "Open the settings window on the allow/forbid-tools tab.", "permissions"),
     ):
-        gui = sub.add_parser(name, help=help_text)
-        gui.add_argument(
-            "--port", type=int, default=0, help="Port to bind (default: pick a free one)."
-        )
-        gui.add_argument(
-            "--no-browser", action="store_true", help="Don't open a browser automatically."
-        )
-        gui.set_defaults(func=cmd_gui, path=path)
+        sub.add_parser(name, help=help_text).set_defaults(func=cmd_gui, page=page)
 
     args = parser.parse_args()
     logging.basicConfig(

@@ -26,11 +26,15 @@ from .auth.base import AuthUI
 from .config import Account, add_account, config_path, load_config
 from .providers import THUNDERBIRD_CLIENT_ID
 from .secrets import SecretStore
+from .shortcuts import create_shortcuts
 
 log = logging.getLogger(__name__)
 
 #: Name the MCP server executable is installed under.
 SERVER_BINARY_NAME = "rubit-mcp-mail.exe" if sys.platform == "win32" else "rubit-mcp-mail"
+
+#: Name the settings GUI executable is installed under.
+GUI_BINARY_NAME = "rubit-mcp-mail-gui.exe" if sys.platform == "win32" else "rubit-mcp-mail-gui"
 
 #: Offered as suggestions on the "other provider" page (same list as the README).
 KNOWN_IMAP_HOSTS: dict[str, str] = {
@@ -63,12 +67,17 @@ class SetupResult:
     config_file: Path
     secret_backend: str
     server_path: Path | None = None
+    #: Where the settings GUI ended up, when one could be installed.
+    gui_path: Path | None = None
     signin_message: str | None = None
     signin_error: str | None = None
     notes: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
+        # Deliberately not gated on `gui_path`: a machine where the shortcut or
+        # the GUI copy failed still has a working, registered mail server, and
+        # saying otherwise would send the user chasing the wrong problem.
         return self.signin_error is None and self.server_path is not None
 
 
@@ -102,9 +111,9 @@ def bundled_server_binary() -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def install_server_binary(source: Path, target_dir: Path) -> Path:
-    """Copy the server executable into `target_dir` and make it runnable."""
-    target = target_dir / SERVER_BINARY_NAME
+def _install_binary(source: Path, target_dir: Path, name: str) -> Path:
+    """Copy one executable into `target_dir` under `name` and make it runnable."""
+    target = target_dir / name
     if target.exists() and source.resolve() == target.resolve():
         return target
 
@@ -121,6 +130,22 @@ def install_server_binary(source: Path, target_dir: Path) -> Path:
     if os.name == "posix":
         target.chmod(0o755)
     return target
+
+
+def install_server_binary(source: Path, target_dir: Path) -> Path:
+    """Copy the server executable into `target_dir` and make it runnable."""
+    return _install_binary(source, target_dir, SERVER_BINARY_NAME)
+
+
+def install_gui_binary(target_dir: Path) -> Path:
+    """Copy the settings GUI executable into `target_dir`.
+
+    The installer *is* the GUI: one windowed binary that opens the setup wizard
+    when run as `install` and the settings window when run with no arguments.
+    So there is nothing to unpack here - it copies itself, which also means the
+    file the user downloaded and the one they end up clicking are identical.
+    """
+    return _install_binary(Path(sys.executable), target_dir, GUI_BINARY_NAME)
 
 
 def dev_server_command() -> Path:
@@ -146,6 +171,20 @@ def ensure_server_installed(install_dir: Path | None = None) -> Path:
     if bundled := bundled_server_binary():
         return install_server_binary(bundled, install_dir or default_install_dir())
     return dev_server_command()
+
+
+def gui_launch_command(install_dir: Path | None = None) -> tuple[Path, str]:
+    """What a shortcut should point at to open the settings window.
+
+    Returns (executable, arguments). Frozen, that is the GUI binary this
+    installs alongside the server; from a source checkout there is no such
+    binary, so the shortcut points at the console script instead - a developer
+    convenience, not what a user ever gets. Either way the argument is `gui`,
+    because both executables run something else when given none.
+    """
+    if is_frozen():
+        return install_gui_binary(install_dir or default_install_dir()), "gui"
+    return dev_server_command(), "gui"
 
 
 # -- reading what is already there ---------------------------------------
@@ -316,6 +355,18 @@ def apply_setup(
     except Exception as exc:  # noqa: BLE001
         result.notes.append(f"Could not install the mail server executable: {exc}")
 
+    # The whole point of this step is that the user never has to open a
+    # terminal again, so a failure here is reported and stepped over rather
+    # than allowed to abandon a mailbox that is otherwise set up.
+    try:
+        executable, arguments = gui_launch_command(install_dir)
+        # Only worth naming in the summary when it is a file we installed; from
+        # a checkout it is just the console script already on this machine.
+        result.gui_path = executable if is_frozen() else None
+        result.notes.extend(create_shortcuts(executable, arguments))
+    except Exception as exc:  # noqa: BLE001
+        result.notes.append(f"Could not install the settings window: {exc}")
+
     try:
         result.signin_message = run_signin(_account_for(path, plan), store, ui)
     except Exception as exc:  # noqa: BLE001
@@ -398,6 +449,8 @@ def _report_console(result: SetupResult, out: Callable[[str], None]) -> None:
     out(f"Secrets: {result.secret_backend}")
     if result.server_path:
         out(f"Server:  {result.server_path}")
+    if result.gui_path:
+        out(f"Settings: {result.gui_path}")
     for note in result.notes:
         out(note)
     if result.server_path:

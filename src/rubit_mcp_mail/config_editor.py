@@ -7,16 +7,17 @@ file untouched. `save_document` gets the second one by writing a temp file,
 running it through `config.load_config` - the very same parser the CLI and the
 server use - and only then replacing the original.
 
-The web form posts one checkbox per (account, tool) pair, named
-`enabled__<account>__<tool>`, present in the body only when checked (standard
-HTML checkbox semantics). `apply_toggles` turns that into the new
-`disabled_tools` list per account.
+Permissions are expressed the other way round in the GUI and in the file: the
+GUI shows one checkbox per tool, ticked when the tool is *allowed*, while the
+config stores the tools that are *forbidden*. `disabled_from_enabled` is the
+one place that inverts it.
 """
 
 from __future__ import annotations
 
 import os
 import re
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -27,8 +28,6 @@ from tomlkit import TOMLDocument
 from .config import Account, first_error, load_config
 from .permissions import TOOL_NAMES
 from .providers import PROFILES
-
-CHECKBOX_PREFIX = "enabled__"
 
 # An account name is both a TOML bare key and part of the SecretStore key, so
 # keep it to characters that need no quoting anywhere.
@@ -43,22 +42,14 @@ ACCOUNT_FIELDS = ("provider", "email", "client_id", "host", "port", "ssl")
 
 
 # -- permissions -------------------------------------------------------------
-def checkbox_name(account: str, tool: str) -> str:
-    return f"{CHECKBOX_PREFIX}{account}__{tool}"
+def disabled_from_enabled(enabled: Collection[str]) -> list[str]:
+    """The `disabled_tools` value for an account, given the tools left ticked.
 
-
-def apply_toggles(accounts: list[str], posted: dict[str, list[str]]) -> dict[str, list[str]]:
-    """Compute the new disabled_tools list per account from a posted form.
-
-    `posted` is the dict produced by `urllib.parse.parse_qs` - each present
-    key maps to a non-empty list of values; an unchecked checkbox simply has
-    no key at all.
+    The GUI thinks in allowed tools and the file records forbidden ones, so the
+    inversion happens here rather than at each call site. An unknown name in
+    `enabled` is ignored: only the tools in `TOOL_NAMES` can be written.
     """
-    result: dict[str, list[str]] = {}
-    for account in accounts:
-        disabled = [tool for tool in TOOL_NAMES if checkbox_name(account, tool) not in posted]
-        result[account] = sorted(disabled)
-    return result
+    return sorted(tool for tool in TOOL_NAMES if tool not in enabled)
 
 
 def write_disabled_tools(path: Path, updates: dict[str, list[str]]) -> None:

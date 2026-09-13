@@ -177,9 +177,10 @@ class MicrosoftDeviceCodeAuth:
     def interactive_setup(self, ui: AuthUI | None = None) -> str:
         """Show the code through `ui` (the terminal by default), then block.
 
-        Front ends that cannot block for the whole handshake - the web GUI,
-        which has to answer the HTTP request that started it - drive
-        `begin_device_flow` and `complete_device_flow` themselves instead.
+        Both GUI front ends call this from a worker thread, which is what lets
+        them block here for the whole handshake. A front end that cannot block
+        at all can drive `begin_device_flow` and `complete_device_flow`
+        itself instead.
         """
         ui = ui or ConsoleAuthUI()
         started = self.begin_device_flow()

@@ -126,6 +126,40 @@ class TestEnsureServerInstalled:
             installer.ensure_server_installed()
 
 
+class TestGuiLaunchCommand:
+    def test_frozen_installs_a_copy_of_the_running_installer(self, tmp_path, monkeypatch):
+        # The installer is the GUI: same binary, different argument. So there is
+        # nothing to unpack - it copies itself.
+        running = tmp_path / "Downloads" / "rubit-mcp-mail-setup"
+        running.parent.mkdir()
+        running.write_bytes(b"the installer itself")
+        monkeypatch.setattr(installer, "is_frozen", lambda: True)
+        monkeypatch.setattr(installer.sys, "executable", str(running))
+
+        executable, arguments = installer.gui_launch_command(tmp_path / "bin")
+
+        assert executable == tmp_path / "bin" / installer.GUI_BINARY_NAME
+        assert executable.read_bytes() == b"the installer itself"
+        assert arguments == "gui"
+
+    def test_the_installed_copy_is_runnable(self, tmp_path, monkeypatch):
+        running = tmp_path / "setup"
+        running.write_bytes(b"x")
+        monkeypatch.setattr(installer, "is_frozen", lambda: True)
+        monkeypatch.setattr(installer.sys, "executable", str(running))
+
+        executable, _ = installer.gui_launch_command(tmp_path / "bin")
+
+        if os.name == "posix":
+            assert executable.stat().st_mode & 0o111
+
+    def test_a_source_install_points_at_the_console_script(self, monkeypatch):
+        monkeypatch.setattr(installer, "is_frozen", lambda: False)
+        monkeypatch.setattr(installer.shutil, "which", lambda name: "/usr/local/bin/rubit-mcp-mail")
+
+        assert installer.gui_launch_command() == (Path("/usr/local/bin/rubit-mcp-mail"), "gui")
+
+
 class TestSuggestAccountName:
     def test_uses_the_local_part(self):
         assert installer.suggest_account_name("Jane.Doe@outlook.com") == "janedoe"
@@ -209,6 +243,45 @@ class TestApplySetup:
         assert result.signin_error is None
         assert registered == [SERVER]
         assert result.ok
+
+    def test_installs_the_gui_and_a_shortcut_to_it(
+        self, tmp_path, store, strategy, no_clients, monkeypatch
+    ):
+        running = tmp_path / "rubit-mcp-mail-setup"
+        running.write_bytes(b"installer")
+        monkeypatch.setattr(installer, "is_frozen", lambda: True)
+        monkeypatch.setattr(installer.sys, "executable", str(running))
+        monkeypatch.setattr(installer, "ensure_server_installed", lambda install_dir=None: SERVER)
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+
+        result = installer.apply_setup(
+            self._plan(),
+            config_file=tmp_path / "config.toml",
+            install_dir=tmp_path / "bin",
+            store=store,
+        )
+
+        gui = tmp_path / "bin" / installer.GUI_BINARY_NAME
+        assert result.gui_path == gui
+        entry = tmp_path / "data" / "applications" / "rubit-mcp-mail.desktop"
+        assert f'Exec="{gui}" gui' in entry.read_text()
+        assert result.ok
+
+    def test_a_shortcut_that_cannot_be_created_does_not_fail_setup(
+        self, tmp_path, store, strategy, no_clients, monkeypatch, installed_server
+    ):
+        # A locked-down desktop must not cost the user a working mailbox.
+        def explode(*_args, **_kwargs):
+            raise RuntimeError("no session bus")
+
+        monkeypatch.setattr(installer, "gui_launch_command", explode)
+
+        result = installer.apply_setup(
+            self._plan(), config_file=tmp_path / "config.toml", store=store
+        )
+
+        assert result.ok
+        assert any("no session bus" in note for note in result.notes)
 
     def test_the_ui_is_handed_to_the_real_sign_in_flow(self, tmp_path, store, strategy, no_clients):
         ui = RecordingUI()

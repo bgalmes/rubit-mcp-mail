@@ -25,9 +25,15 @@ that one file. A window asks for your provider and email address, signs you in,
 and registers the mail server with Claude Desktop and Claude Code if it finds
 them — restart Claude Desktop afterwards and your mail is there.
 
-Run it again whenever you want to add a second mailbox or repair a sign-in; it
-updates what is already configured rather than replacing it. On a machine with
-no desktop (over SSH, say) the same file walks you through it in the terminal.
+It also leaves you a **rubit-mcp-mail Settings** shortcut — Start Menu and
+Desktop on Windows, the application menu on Linux — which opens
+[the settings window](#the-gui) for anything you want to change later. No
+terminal, at any point.
+
+Run the installer again whenever you want to add a second mailbox or repair a
+sign-in; it updates what is already configured rather than replacing it. On a
+machine with no desktop (over SSH, say) the same file walks you through it in
+the terminal.
 
 **A note on antivirus warnings.** Windows Defender or Avast may flag this `.exe`.
 This is a known false positive common to unsigned PyInstaller-built applications
@@ -86,10 +92,10 @@ failing silently. This is meant for future write tools (send, mark as
 read/unread, etc.) that don't exist yet, but it works against today's
 read-only tools too — for example to keep attachments off a shared account.
 
-Rather than editing TOML by hand, run `rubit-mcp-mail permissions` — it opens
-[the GUI](#the-gui) directly on the permissions page, a grid of accounts and
-tools where unchecking a box and saving writes `disabled_tools` back into
-`config.toml`.
+Rather than editing TOML by hand, open [the settings window](#the-gui) on its
+Permissions tab — a grid of accounts and tools where unticking a box and saving
+writes `disabled_tools` back into `config.toml`. `rubit-mcp-mail permissions`
+opens it there directly.
 
 **A `serve` process caches its config on first read**, so toggling a
 permission here does not affect a *running* MCP server (e.g. one launched by
@@ -100,41 +106,43 @@ Claude Desktop) until it is restarted.
 [Quick install](#quick-install) and `rubit-mcp-mail install` cover first-time
 setup. For everything after that — a second mailbox, a typo'd `client_id`, a
 changed download directory — this is the editor, and everything in
-`config.toml` can be managed from a local web page instead of a text editor:
+`config.toml` can be managed from a window instead of a text editor.
+
+Setup puts it in your **Start Menu and on your Desktop** (Windows) or in your
+**application menu** (Linux), as *rubit-mcp-mail Settings*. Click it. Nothing
+needs to be typed, and no browser is involved. From a terminal, or from a
+source checkout, the same window opens with:
 
 ```bash
 rubit-mcp-mail gui
 ```
 
-It prints a URL (and opens your browser at it) with pages to:
+It has four tabs:
 
-- **See every account at a glance** — provider, server, and whether it is signed
-  in, with the same diagnosis `doctor` gives.
-- **Add, edit, and remove accounts** — pick Outlook or any other IMAP server,
-  fill in the fields, and the form is validated before anything is written. The
-  Outlook page offers Thunderbird's shared client ID for accounts that
-  [can't register their own Azure app](#cant-register-your-own-app).
-- **Sign in** — the password prompt for app-password providers, and the full
-  device-code flow for Outlook, without dropping to a terminal. Credentials go
-  to the same keyring (or `0600` file) the CLI uses; the config file never
-  holds a secret.
-- **Set the download directory** and the per-account tool permissions.
-- **Edit provider overrides** — the `[providers.*]` tables described under
+- **Accounts** — every account at a glance: provider, server, and whether it is
+  signed in, with the same diagnosis `doctor` gives. Add, edit and remove them
+  here; pick Outlook or any other IMAP server, and the form is validated before
+  anything is written. The Outlook form offers Thunderbird's shared client ID
+  for accounts that [can't register their own Azure app](#cant-register-your-own-app).
+  The attachment download directory lives at the bottom.
+- **Permissions** — the grid of accounts and tools described under
+  [Permissions](#permissions).
+- **Providers** — the `[providers.*]` overrides described under
   [If Microsoft changes their endpoints](#if-microsoft-changes-their-endpoints),
   without writing TOML table syntax.
-- **Run doctor** and read the result in the page.
+- **Doctor** — runs the full check, connection included, and shows the result.
+
+**Signing in** happens in the window too: the password prompt for app-password
+providers, and the full device-code flow for Outlook, so neither needs a
+terminal. Credentials go to the same keyring (or `0600` file) the CLI uses; the
+config file never holds a secret. Outlook's device-code step still opens your
+browser, because the page you approve on is Microsoft's.
 
 It reads and writes the very same file the CLI and server use, through the same
 parser: a hand-edited config opens correctly in the GUI, saving one account
 leaves every other line, comment and ordering untouched, and a change that
-would not load is refused rather than written. Use `--port` for a fixed port
-and `--no-browser` to skip opening one.
-
-**On access:** the page binds to `127.0.0.1` only, and the URL it prints carries
-a random token minted at startup (exchanged for a session cookie on first
-load). Requests without it are refused, as are requests arriving under a
-non-loopback hostname or a form posted from another site. Open the URL as
-printed; the token is what keeps other pages in your browser out.
+would not load is refused rather than written. An account too broken to load is
+still listed and still opens, which is the case you most need it for.
 
 ## Install
 
@@ -166,8 +174,9 @@ rubit_mcp_mail` if you'd rather not depend on the `.exe` shim). For example:
 
 The config file lives at `%USERPROFILE%\.config\rubit-mcp-mail\config.toml`
 — `Path.home() / ".config"` resolves there on Windows too. The simplest way to
-create it is `.venv\Scripts\rubit-mcp-mail.exe gui`, which writes the file for
-you; to do it by hand, use `mkdir` and a text editor instead of the `cat`
+create it is `.venv\Scripts\rubit-mcp-mail.exe gui` and adding an account there,
+which writes the file for you; to do it by hand, use `mkdir` and a text editor
+instead of the `cat`
 heredoc the [Configure](#2-configure) section shows:
 
 ```powershell
@@ -309,8 +318,8 @@ authority = "https://login.microsoftonline.com/common"
 scopes = ["https://outlook.office.com/IMAP.AccessAsUser.All"]
 ```
 
-Only include the keys you actually need to change; the GUI's Providers page
-writes the same table from a form. `rubit-mcp-mail doctor` prints a line naming
+Only include the keys you actually need to change; the settings window's
+Providers tab writes the same table from a form. `rubit-mcp-mail doctor` prints a line naming
 any overrides currently in effect. This works for any
 provider, not just Outlook — `port` and `ssl` are overridable too.
 
@@ -464,14 +473,14 @@ src/rubit_mcp_mail/
   __main__.py      CLI: serve | install | auth | doctor | gui
   installer.py     setup wizard: writes config, signs in, registers with Claude
   installer_gui.py the setup window (tkinter), falling back to the terminal
+  shortcuts.py     Start Menu / Desktop / .desktop entries for the GUI
   claude_registration.py  claude_desktop_config.json / `claude mcp add`
   session.py       wires config + auth + backend; attachment path safety
   config.py        TOML config -> Account models
   diagnostics.py   the doctor checks, as data (shared by the CLI and the GUI)
   permissions.py   registry of per-account-toggleable tool names
   config_editor.py every write to config.toml: comment-preserving, validated
-  webui.py         local web GUI: routing and access control
-  webui_pages.py   local web GUI: HTML
+  config_gui.py    the settings window (tkinter): accounts, permissions, doctor
   providers.py     provider profile registry
   secrets.py       keyring with 0600-file fallback
   models.py        pydantic models + message handles

@@ -3,8 +3,7 @@ import tomllib
 
 from rubit_mcp_mail.config import load_config
 from rubit_mcp_mail.config_editor import (
-    apply_toggles,
-    checkbox_name,
+    disabled_from_enabled,
     load_document,
     remove_account,
     remove_provider_override,
@@ -34,22 +33,25 @@ host     = "imap.fastmail.com"
 """
 
 
-class TestApplyToggles:
-    def test_all_checked_means_nothing_disabled(self):
-        posted = {checkbox_name("x", tool): ["on"] for tool in TOOL_NAMES}
-        assert apply_toggles(["x"], posted) == {"x": []}
+class TestDisabledFromEnabled:
+    def test_all_ticked_means_nothing_disabled(self):
+        assert disabled_from_enabled(TOOL_NAMES) == []
 
-    def test_unchecked_box_is_disabled(self):
-        posted = {tool: ["on"] for tool in TOOL_NAMES if tool != "read_message"}
-        posted = {checkbox_name("x", k): v for k, v in posted.items()}
-        assert apply_toggles(["x"], posted) == {"x": ["read_message"]}
+    def test_unticked_tool_is_disabled(self):
+        enabled = [tool for tool in TOOL_NAMES if tool != "read_message"]
+        assert disabled_from_enabled(enabled) == ["read_message"]
 
-    def test_no_posted_keys_disables_everything(self):
-        assert apply_toggles(["x"], {}) == {"x": sorted(TOOL_NAMES)}
+    def test_nothing_ticked_disables_everything(self):
+        assert disabled_from_enabled([]) == sorted(TOOL_NAMES)
 
-    def test_multiple_accounts_are_independent(self):
-        posted = {checkbox_name("a", tool): ["on"] for tool in TOOL_NAMES}
-        assert apply_toggles(["a", "b"], posted) == {"a": [], "b": sorted(TOOL_NAMES)}
+    def test_result_is_sorted(self):
+        assert disabled_from_enabled(["list_folders"]) == sorted(
+            tool for tool in TOOL_NAMES if tool != "list_folders"
+        )
+
+    def test_an_unknown_name_is_ignored(self):
+        # Only tools in the registry can be written, whatever the caller passes.
+        assert disabled_from_enabled([*TOOL_NAMES, "send_message"]) == []
 
 
 class TestWriteDisabledTools:

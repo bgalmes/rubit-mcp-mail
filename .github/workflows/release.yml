@@ -40,10 +40,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Gives PyInstaller the Tcl/Tk shared libraries to bundle on Linux.
+      # Tcl/Tk for PyInstaller to bundle, and Xvfb so the built binary can be
+      # made to open a real window below without a display attached.
       - name: Install Tk (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y python3-tk tk
+        run: sudo apt-get update && sudo apt-get install -y python3-tk tk xvfb
 
       - name: Install the project
         run: |
@@ -86,13 +87,30 @@ jobs:
       # Windowed build, carrying the server executable above inside it: the
       # wizard unpacks that into a permanent directory and registers its path,
       # so the installer itself can be deleted afterwards.
+      #
+      # This binary is also the settings GUI - run with `gui` it opens the
+      # settings window instead of the wizard - so setup installs a copy of it
+      # next to the server and points a shortcut at that. The icon is bundled
+      # as data because the Linux .desktop entry needs the PNG at runtime, not
+      # just at build time.
       - name: Build the installer
         run: |
           pyinstaller --onefile --clean --windowed \
             --name rubit-mcp-mail-setup \
             --version-file packaging/version_info.txt \
+            ${{ runner.os == 'Windows' && '--icon packaging/icons/rubit-mcp-mail.ico' || '' }} \
+            --add-data "packaging/icons/rubit-mcp-mail.png${{ matrix.sep }}." \
             --add-binary "dist/rubit-mcp-mail${{ matrix.ext }}${{ matrix.sep }}." \
             packaging/setup_entry.py
+
+      # Proves Tcl/Tk actually made it into the bundle. A frozen build that
+      # cannot open a window is the failure this whole binary exists to avoid,
+      # and it is invisible until someone double-clicks it.
+      - name: Smoke-test that the frozen GUI can open a window
+        if: runner.os == 'Linux'
+        run: xvfb-run -a "dist/rubit-mcp-mail-setup" gui | grep -q "Tk .* available"
+        env:
+          RUBIT_MCP_MAIL_SELFTEST: "1"
 
       - name: Name the asset
         run: mv "dist/rubit-mcp-mail-setup${{ matrix.ext }}" "${{ matrix.asset }}"
