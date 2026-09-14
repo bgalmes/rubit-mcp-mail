@@ -17,6 +17,7 @@ import threading
 import webbrowser
 from pathlib import Path
 
+from . import __version__
 from .config import Account
 from .installer import (
     KNOWN_IMAP_HOSTS,
@@ -74,7 +75,7 @@ class Wizard:
         # account page is built would stack duplicate callbacks.
         self.var_email.trace_add("write", self._suggest_name)
 
-        root.title(WINDOW_TITLE)
+        root.title(f"{WINDOW_TITLE} — v{__version__}")
         root.minsize(600, 430)
         try:
             ttk.Style().theme_use("clam")

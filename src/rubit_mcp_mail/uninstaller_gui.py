@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from . import __version__
 from .installer import default_install_dir
 from .secrets import SecretStore
 from .uninstaller import UninstallResult, apply_uninstall, console_uninstall
@@ -48,7 +49,7 @@ class UninstallWindow:
         self.store = store
         self.exit_code = 1
 
-        root.title(WINDOW_TITLE)
+        root.title(f"{WINDOW_TITLE} — v{__version__}")
         root.minsize(520, 300)
         try:
             ttk.Style().theme_use("clam")

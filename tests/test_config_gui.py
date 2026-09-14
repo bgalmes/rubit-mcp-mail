@@ -153,6 +153,10 @@ class TestDoctorText:
     def test_says_so_when_nothing_is_configured(self):
         assert "No accounts configured." in config_gui.doctor_text(Report(config_path=Path("/c")))
 
+    def test_includes_the_version(self):
+        report = Report(config_path=Path("/c"), version="1.2.3")
+        assert "Version:   1.2.3" in config_gui.doctor_text(report)
+
     def test_lists_folders_for_a_connected_account(self):
         account = signed_in(
             folders=[Folder(name="INBOX", role="inbox", messages=12, unseen=3)],
