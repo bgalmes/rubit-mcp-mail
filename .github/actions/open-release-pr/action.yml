@@ -1,0 +1,67 @@
+name: Open or update a release PR
+description: >
+  Commits the staged pyproject.toml/CHANGELOG.md bump onto a bot-owned release
+  branch, force-pushes it, and opens or updates its PR against the base branch.
+
+inputs:
+  branch:
+    description: Bot-owned branch carrying the bump (release/next or release/promote).
+    required: true
+  version:
+    description: Version being released, without the leading v.
+    required: true
+  body:
+    description: PR body.
+    required: true
+  token:
+    description: Token for gh. Composite actions do not inherit secrets, so pass it in.
+    required: true
+  base:
+    description: Base branch for the PR.
+    default: main
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        BRANCH: ${{ inputs.branch }}
+        BASE: ${{ inputs.base }}
+        VERSION: ${{ inputs.version }}
+        BODY: ${{ inputs.body }}
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git checkout -B "$BRANCH"
+        git add pyproject.toml CHANGELOG.md
+        git commit -m "chore(release): ${VERSION}"
+        git push --force origin "$BRANCH"
+
+        title="chore(release): ${VERSION}"
+
+        # `gh pr create` goes through the GraphQL createPullRequest mutation, which
+        # intermittently answers with GitHub's generic internal error ("Something
+        # went wrong while executing your query" plus a request ID) - that is what
+        # broke the 1.0.0 promotion. Retry, and re-list first on every attempt: the
+        # mutation can fail *after* the PR was actually created, and a blind retry
+        # would then fail again with "a pull request already exists".
+        for attempt in 1 2 3; do
+          existing="$(gh pr list --head "$BRANCH" --base "$BASE" --state open \
+            --json number --jq '.[0].number // empty')" || existing=""
+
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "$title" --body "$BODY" && exit 0
+          else
+            gh pr create --head "$BRANCH" --base "$BASE" \
+              --title "$title" --body "$BODY" && exit 0
+          fi
+
+          if [ "$attempt" -lt 3 ]; then
+            echo "::warning::Attempt ${attempt} on the ${BRANCH} PR failed; retrying."
+            sleep $((attempt * 5))
+          fi
+        done
+
+        echo "::error::Could not open or update the ${BRANCH} PR after 3 attempts."
+        exit 1

@@ -61,34 +61,18 @@ jobs:
 
       - name: Open or update the promotion PR
         if: steps.version.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B release/promote
-          git add pyproject.toml CHANGELOG.md
-          git commit -m "chore(release): ${VERSION}"
-          git push --force origin release/promote
+        uses: ./.github/actions/open-release-pr
+        with:
+          branch: release/promote
+          version: ${{ steps.version.outputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            Automated promotion to stable - **merge this PR to publish the release**.
 
-          body="$(cat <<EOF
-          Automated promotion to stable - **merge this PR to publish the release**.
+            Merging tags the merge commit as `v${{ steps.version.outputs.version }}` and
+            publishes it as the final, non-prerelease GitHub release, then builds and
+            attaches the Linux and Windows installers.
 
-          Merging tags the merge commit as \`v${VERSION}\` and publishes it as the
-          final, non-prerelease GitHub release, then builds and attaches the Linux
-          and Windows installers.
-
-          Note: CI does not run on this PR - GitHub does not trigger workflows for
-          events created by \`GITHUB_TOKEN\`. The diff only ever touches
-          \`pyproject.toml\` and \`CHANGELOG.md\`.
-          EOF
-          )"
-
-          existing="$(gh pr list --head release/promote --base main --state open --json number --jq '.[0].number // empty')"
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "chore(release): ${VERSION}" --body "$body"
-          else
-            gh pr create --head release/promote --base main \
-              --title "chore(release): ${VERSION}" --body "$body"
-          fi
+            Note: CI does not run on this PR - GitHub does not trigger workflows for
+            events created by `GITHUB_TOKEN`. The diff only ever touches
+            `pyproject.toml` and `CHANGELOG.md`.
