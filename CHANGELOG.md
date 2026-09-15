@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.0 (2026-09-15)
+
+### Documentation
+
+- **site**: Add the project website ([#31](https://github.com/bgalmes/rubit-mcp-mail/pull/31),
+  [`e5c4a32`](https://github.com/bgalmes/rubit-mcp-mail/commit/e5c4a32421c87e5d88a83e4d5a2424184577d28e))
+
+
 ## v1.0.0-rc.3 (2026-09-15)
 
 ### Bug Fixes
