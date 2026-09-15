@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.0.0-rc.3 (2026-09-15)
+
+### Bug Fixes
+
+- Make the test suite pass on Windows
+  ([`b8fbac9`](https://github.com/bgalmes/rubit-mcp-mail/commit/b8fbac980ec170dd30a4136e306c3f04bd90f425))
+
+
 ## v1.0.0-rc.2 (2026-09-15)
 
 ### Bug Fixes

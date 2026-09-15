@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rubit-mcp-mail"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 description = "Provider-agnostic, read-only MCP server for reading mail over IMAP"
 requires-python = ">=3.11"
 dependencies = [
