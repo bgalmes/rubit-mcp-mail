@@ -1,0 +1,39 @@
+{
+  "name": "rubit-mcp-mail-website",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || ^24.11.0 || >=26.0.0"
+  },
+  "scripts": {
+    "prepare-data": "node scripts/fetch-releases.mjs",
+    "postinstall": "nuxt prepare",
+    "predev": "npm run prepare-data",
+    "dev": "nuxt dev",
+    "prebuild": "npm run prepare-data",
+    "build": "nuxt build",
+    "pregenerate": "npm run prepare-data",
+    "generate": "nuxt generate",
+    "generate:gh": "NUXT_APP_BASE_URL=/rubit-mcp-mail/ NITRO_PRESET=github_pages npm run generate",
+    "preview": "node scripts/preview-subpath.mjs",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.0",
+    "@iconify-json/simple-icons": "^1.2.0",
+    "@nuxt/content": "^3.16.0",
+    "@nuxt/image": "^2.1.0",
+    "@nuxt/ui": "^4.11.1",
+    "@nuxtjs/sitemap": "^8.5.1",
+    "nuxt": "^4.5.2",
+    "tailwindcss": "^4.3.3",
+    "ufo": "^1.6.4",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vue-tsc": "^3.0.0"
+  }
+}

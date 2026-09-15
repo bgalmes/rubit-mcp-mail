@@ -1,9 +1,26 @@
 name: CI
 
+# The website lives in website/ and is built and deployed by
+# deploy-website.yml; running the Python matrix on a site-only change is pure
+# waste.
+#
+# Markdown is deliberately NOT excluded. tests/test_providers.py reads
+# README.md and asserts the Thunderbird client ID still appears in it, so a
+# README-only PR that drops it has to be caught here - excluding *.md would let
+# exactly that PR merge green and break main.
+#
+# Note the wrinkle documented in the README under "Why you merge the release PR
+# yourself": a workflow filtered out by paths-ignore reports no status at all,
+# so if `main` ever requires this check, a website-only PR needs the admin
+# "Merge without waiting for requirements to be met" button - the same button
+# the release PRs already need.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main]
+    paths-ignore:
+      - "website/**"
+      - ".gitattributes"
 
 jobs:
   test:

@@ -11,6 +11,8 @@ Python 3.11+, `src/` layout:
 - `src/rubit_mcp_mail/backends/` — provider-specific backends
 - `src/rubit_mcp_mail/auth/` — auth handling
 - `tests/` — test suite
+- `website/` — the documentation site (Nuxt 4 + Nuxt UI), deployed to GitHub Pages. It is
+  the source of truth for the docs; `README.md` is deliberately the short version.
 
 See the README's "Layout" section for a file-by-file breakdown.
 
@@ -45,6 +47,10 @@ must follow [Conventional Commits](https://www.conventionalcommits.org/):
 | `BREAKING CHANGE:` in the footer, or `!` after the type/scope (e.g. `feat!:`) | major (`0.1.0` → `1.0.0`) |
 
 Other common types (`docs:`, `refactor:`, `test:`, `chore:`, `ci:`) don't trigger a release.
+
+**Changes under `website/` must never use `feat:` or `fix:`.** The parser keys on the commit
+*type*, not the scope, so `feat(site): ...` bumps the Python package and cuts an installer
+release. Use `docs(site):`, `chore(site):` or `ci(site):`.
 
 PRs are squash-merged, so the **squash commit message** is what the release tooling parses —
 make sure it follows this format, not just the individual commits on the branch.

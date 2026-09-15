@@ -1,0 +1,188 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Tailwind scans source files for class names; markdown under content/ is
+   outside its default roots, so utilities used inside MDC blocks would be
+   stripped from the build without this. */
+@source "../../../content/**/*";
+
+@theme static {
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* The brand scale, derived in OKLCH from the app icon's blue.
+     `packaging/icons/rubit-mcp-mail.png` is 75% #0B5CD5 = oklch(0.5092 0.1995 260.03),
+     which is pinned here as step 600. Lightness follows Tailwind v4's ramp so the
+     scale stays perceptually even, and 400/500 sit high enough to stay legible as
+     an accent on a near-black canvas. */
+  --color-rubit-50: oklch(0.97 0.0259 260.03);
+  --color-rubit-100: oklch(0.932 0.0519 260.03);
+  --color-rubit-200: oklch(0.882 0.0938 260.03);
+  --color-rubit-300: oklch(0.809 0.1397 260.03);
+  --color-rubit-400: oklch(0.707 0.1836 260.03);
+  --color-rubit-500: oklch(0.623 0.1995 260.03);
+  --color-rubit-600: oklch(0.5092 0.1995 260.03);
+  --color-rubit-700: oklch(0.452 0.1856 260.03);
+  --color-rubit-800: oklch(0.424 0.1636 260.03);
+  --color-rubit-900: oklch(0.379 0.1437 260.03);
+  --color-rubit-950: oklch(0.282 0.1097 260.03);
+}
+
+/* ---------------------------------------------------------------------------
+   Surface tokens.
+
+   Defined on bare :root first so no colour has its only definition inside a
+   dark-mode block, then re-pointed for dark. Nuxt UI reads --ui-* for its own
+   components; --surface-* are ours, for the hand-built sections.
+   --------------------------------------------------------------------------- */
+:root {
+  --canvas: oklch(0.99 0.002 260);
+  --surface: oklch(1 0 0);
+  --surface-raised: oklch(0.975 0.003 260);
+  --hairline: oklch(0.2 0.02 260 / 0.12);
+  --hairline-strong: oklch(0.2 0.02 260 / 0.2);
+  --glow: var(--color-rubit-500);
+  --grid-line: oklch(0.2 0.02 260 / 0.07);
+}
+
+.dark {
+  --canvas: oklch(0.145 0.004 260);
+  --surface: oklch(0.178 0.005 260);
+  --surface-raised: oklch(0.205 0.006 260);
+  --hairline: oklch(1 0 0 / 0.08);
+  --hairline-strong: oklch(1 0 0 / 0.14);
+  --glow: var(--color-rubit-400);
+  --grid-line: oklch(1 0 0 / 0.055);
+
+  /* Push Nuxt UI's neutrals onto the same near-black canvas. */
+  --ui-bg: var(--canvas);
+  --ui-bg-muted: var(--surface);
+  --ui-bg-elevated: var(--surface-raised);
+  --ui-border: var(--hairline);
+  --ui-border-accented: var(--hairline-strong);
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--canvas);
+  font-feature-settings: "cv11", "ss01";
+  font-variation-settings: normal;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--glow) 30%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   Hero backdrop: a perspective grid, two drifting aurora blobs and a film of
+   noise. All CSS - no canvas, no JS, nothing to hydrate.
+   --------------------------------------------------------------------------- */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.backdrop-grid {
+  position: absolute;
+  inset: -10% -10% 0 -10%;
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 10%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 10%, transparent 70%);
+}
+
+.backdrop-aurora {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.4;
+  will-change: transform;
+}
+
+.backdrop-aurora-a {
+  width: 44rem;
+  height: 30rem;
+  top: -14rem;
+  left: 50%;
+  translate: -70% 0;
+  background: radial-gradient(circle at 50% 50%, var(--glow), transparent 68%);
+  animation: aurora-drift-a 26s ease-in-out infinite alternate;
+}
+
+.backdrop-aurora-b {
+  width: 36rem;
+  height: 26rem;
+  top: -8rem;
+  left: 50%;
+  translate: -10% 0;
+  background: radial-gradient(circle at 50% 50%, var(--color-rubit-600), transparent 70%);
+  opacity: 0.3;
+  animation: aurora-drift-b 34s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-drift-a {
+  from { transform: translate3d(-3rem, -1rem, 0) scale(1); }
+  to   { transform: translate3d(3rem, 2rem, 0) scale(1.12); }
+}
+
+@keyframes aurora-drift-b {
+  from { transform: translate3d(2rem, 1rem, 0) scale(1.08); }
+  to   { transform: translate3d(-3rem, -2rem, 0) scale(0.95); }
+}
+
+/* Fine grain so the large gradients do not band on wide gamut displays. */
+.backdrop-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* A hairline beam under the header, breathing slowly. */
+.backdrop-beam {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glow), transparent);
+  animation: beam-breathe 9s ease-in-out infinite;
+}
+
+@keyframes beam-breathe {
+  0%, 100% { opacity: 0.18; }
+  50%      { opacity: 0.7; }
+}
+
+/* Light mode keeps the same geometry, dialled right down: on white the blobs
+   read as smudges rather than light, so they multiply instead of adding. */
+:root:not(.dark) .backdrop-aurora { opacity: 0.18; mix-blend-mode: multiply; }
+:root:not(.dark) .backdrop-noise { display: none; }
+
+/* A hairline that fades out at both ends - used under the header and between
+   sections, so the rule never collides with the page edge. */
+.rule-fade {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--hairline-strong), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .backdrop-aurora, .backdrop-beam { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,105 @@
+name: Deploy website
+
+# Builds website/ and publishes it to GitHub Pages at
+# https://bgalmes.github.io/rubit-mcp-mail/.
+#
+# The site is fully prerendered - Pages has no server - so the GitHub Releases
+# data behind the download button and /changelog is baked in at build time by
+# website/scripts/fetch-releases.mjs. Freshness therefore depends on rebuilding
+# whenever a release is cut.
+#
+# NOTE the `release: published` trigger below will NOT fire for this repo's own
+# releases. publish-release.yml creates them with GITHUB_TOKEN, and GitHub
+# raises no events for GITHUB_TOKEN-created objects - the same rule that forces
+# build-installers.yml to be called directly rather than left to trigger itself.
+# It is kept only for a release a human creates by hand in the UI. The real hook
+# is the workflow_call below, which publish-release.yml invokes once the
+# installers have been attached.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/deploy-website.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit, branch or tag to build the site from. Empty builds the default branch."
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages allows one deployment at a time. Do not cancel an in-flight one: a
+# cancelled deploy can leave the site stranded on the previous artifact.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: website/.nvmrc
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - run: npm ci
+
+      # Kept separate from the build so a GitHub API problem reads as its own
+      # failure. --strict refuses to continue if no release carries an
+      # installer: a site whose download button points at nothing is worse than
+      # a failed deploy.
+      - name: Bake in the release data
+        run: node scripts/fetch-releases.mjs --strict
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the static site
+        run: npx nuxt generate
+        env:
+          NUXT_APP_BASE_URL: /rubit-mcp-mail/
+          NITRO_PRESET: github_pages
+          NUXT_PUBLIC_WEB3FORMS_KEY: ${{ secrets.WEB3FORMS_ACCESS_KEY }}
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      # The contact form's recipient is bound to the Web3Forms access key
+      # server-side and must never be discoverable in the markup, or it just
+      # becomes another scrapeable address.
+      - name: Assert the inbox address did not leak into the output
+        run: |
+          if grep -rIl "rubit-software@protonmail" .output/public; then
+            echo "::error::The contact inbox address leaked into the built site."
+            exit 1
+          fi
+          echo "OK: the address does not appear in the build output."
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/.output/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,5 +1,12 @@
+# Normalize line endings for source that git may check out on Windows runners.
+# Text is stored LF in the repo and checked out LF everywhere.
+* text=auto eol=lf
+
 # Email fixtures are byte-exact artifacts: the tests assert on the line
 # endings the parser sees, so git must not rewrite them. Without this a
 # Windows checkout (autocrlf=true on the GitHub runners) turns every LF into
 # CRLF and the parsed bodies gain a stray \r.
 tests/fixtures/*.eml -text
+
+# Generated lockfile: collapse it in diffs and reviews.
+website/package-lock.json linguist-generated=true -diff
