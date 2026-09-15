@@ -1,0 +1,81 @@
+name: Publish to the MCP registry
+
+# Lists this server in the official MCP registry
+# (https://registry.modelcontextprotocol.io), which is what feeds server
+# discovery in Claude, Cursor and VS Code, and what most third-party MCP
+# directories mirror. It is the main way someone finds this project without
+# already knowing its name.
+#
+# ORDER MATTERS: the registry verifies that whoever publishes actually owns the
+# package, by fetching rubit-mcp-mail from PyPI and looking for an
+# `mcp-name: io.github.bgalmes/rubit-mcp-mail` marker in its README (the README
+# is the PyPI long description - see the HTML comment at the top of README.md).
+# So the PyPI upload has to land first, which is why publish-release.yml gates
+# this on its `pypi` job.
+#
+# Authentication is GitHub OIDC: the io.github.bgalmes/* namespace is granted to
+# whoever can prove they are this repository, so no token is stored here. That
+# is what `id-token: write` below is for.
+#
+# ONE-TIME SETUP: none for the registry itself, but the PyPI project and its
+# trusted publisher must exist. See publish-release.yml's `pypi` job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag, branch or commit to publish from. Empty uses the default branch."
+        type: string
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      ref:
+        description: "Tag, branch or commit to publish from."
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # server.json names the version twice and semantic-release only stamps
+      # pyproject.toml, so both are filled in from it here rather than left as a
+      # second source of truth to drift. Same reasoning as deploy-website.yml
+      # baking in the release data at build time.
+      - name: Stamp the released version into server.json
+        run: |
+          python - <<'PY'
+          import json, pathlib, tomllib
+
+          version = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
+          path = pathlib.Path("server.json")
+          doc = json.loads(path.read_text())
+          doc["version"] = version
+          for package in doc["packages"]:
+              package["version"] = version
+          path.write_text(json.dumps(doc, indent=2) + "\n")
+          print(f"server.json stamped with {version}")
+          PY
+
+      - name: Install the publisher CLI
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Publish
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
