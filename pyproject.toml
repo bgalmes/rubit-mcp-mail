@@ -19,7 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pyright>=1.1", "ruff>=0.6", "python-semantic-release>=10,<11"]
-# Only needed to build the downloadable installers (see .github/workflows/release.yml).
+# Only needed to build the downloadable installers (see .github/workflows/build-installers.yml).
 # hooks-contrib carries the keyring hook: without it, keyring's backends are
 # discovered through entry points that a frozen bundle does not have.
 build = ["pyinstaller>=6", "pyinstaller-hooks-contrib>=2024.7"]
@@ -49,9 +49,14 @@ select = ["E", "F", "I", "UP", "B"]
 # "Releasing" section of the README, for how these get used. `allow_zero_version`
 # keeps versions in the 0.x range until a deliberate 1.0.0 breaking change;
 # without it every release would jump straight to 1.0.0.
+#
+# pyproject.toml is the only file stamped with the version. Deliberately no
+# `version_variables` for src/rubit_mcp_mail/__init__.py: `__version__` there is
+# read from the installed package metadata, and the only literal in the file is
+# the "0.0.0-dev" fallback for source checkouts - which semantic-release would
+# happily rewrite to the release version, making a dev checkout claim to be one.
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-version_variables = ["src/rubit_mcp_mail/__init__.py:__version__"]
 commit_parser = "conventional"
 commit_author = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
 commit_message = "chore(release): {version} [skip ci]"
@@ -59,8 +64,9 @@ major_on_zero = true
 allow_zero_version = true
 tag_format = "v{version}"
 
-# Every merge to main is published as a `-rc.N` prerelease; promote-release.yml
-# is what drops the suffix for a final release (see the README).
+# Every merge to main prepares a `-rc.N` prerelease; promote-release.yml is what
+# drops the suffix for a final release (see the README). Both pass the prerelease
+# settings on the command line, so this block only has to describe the branch.
 [tool.semantic_release.branches.main]
 match = "main"
 prerelease = false

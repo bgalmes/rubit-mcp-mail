@@ -1,12 +1,36 @@
 name: Build installers
 
-# Publishing a release attaches a ready-to-run installer for each platform to
-# it. workflow_dispatch is here so the build - especially the Windows half -
-# can be exercised without cutting a release first.
+# Builds a ready-to-run installer for each platform and, when given a release
+# tag, attaches them to that release.
+#
+# Called by publish-release.yml rather than triggered by `release: published`:
+# a release created with GITHUB_TOKEN does not fire that event, so a workflow
+# waiting on it would never run. workflow_dispatch is here so the build -
+# especially the Windows half - can be exercised without cutting a release.
 on:
-  release:
-    types: [published]
-  workflow_dispatch: {}
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit, branch or tag to build from."
+        type: string
+        required: true
+      release_tag:
+        description: "Release to attach the installers to. Empty builds without attaching."
+        type: string
+        required: false
+        default: ""
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit, branch or tag to build from. Empty builds the default branch."
+        type: string
+        required: false
+        default: ""
+      release_tag:
+        description: "Release to attach the installers to. Empty builds without attaching."
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -34,7 +58,12 @@ jobs:
             asset: rubit-mcp-mail-setup-windows.exe
 
     steps:
+      # Builds the release tag, not the default branch: the version baked into
+      # the binaries comes from the package metadata of whatever is installed
+      # below, so building the wrong commit silently ships the wrong version.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-python@v5
         with:
@@ -59,6 +88,12 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+      # Stamps the real version into the Windows version resource that both
+      # PyInstaller builds below embed. Generated rather than hand-maintained
+      # so it cannot drift from the version being released.
+      - name: Generate the Windows version resource
+        run: python packaging/make_version_info.py
 
       # Console build: this is what Claude launches and talks to over stdio.
       # --version-file gives the binary a real product name/description
@@ -122,7 +157,9 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to the release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ matrix.asset }}
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ASSET: ${{ matrix.asset }}
+        run: gh release upload "$RELEASE_TAG" "$ASSET" --clobber

@@ -1,11 +1,19 @@
 name: Publish release
 
-# Fires when one of the bot-managed release PRs (opened by auto-release.yml
-# or promote-release.yml) merges into main. That merge is the point where
-# main actually carries the new version - branch protection only blocks
-# direct pushes to the main *branch*, not tags, so this job just tags the
-# merge commit and publishes the corresponding GitHub release: a prerelease
-# for release/next, a final release for release/promote.
+# Fires when one of the bot-managed release PRs (opened by auto-release.yml or
+# promote-release.yml) is merged by a human. That merge is the point where main
+# actually carries the new version, and - because it was a human and not
+# GITHUB_TOKEN that merged - it is a real pull_request event that can trigger
+# this workflow.
+#
+# Branch protection only blocks direct pushes to the main *branch*, not tags, so
+# this job tags the merge commit and publishes the GitHub release: a prerelease
+# for a version carrying an -rc.N suffix, a final release otherwise.
+#
+# The version is read straight out of the merged pyproject.toml rather than
+# recomputed. Recomputing would race: if another PR merged while the release PR
+# was open, semantic-release would derive a newer version than the tree that is
+# actually being tagged.
 on:
   pull_request:
     types: [closed]
@@ -21,31 +29,100 @@ jobs:
       (github.event.pull_request.head.ref == 'release/next' ||
        github.event.pull_request.head.ref == 'release/promote')
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          # The exact commit that landed on main, whatever merge method was used.
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
 
+      # tomllib needs 3.11+, and pins `python` to a known interpreter rather
+      # than whatever the runner image happens to ship.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install python-semantic-release
-        run: python -m pip install --upgrade pip "python-semantic-release>=10,<11"
+      - name: Read the version that was merged
+        id: version
+        run: |
+          version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      # pyproject.toml/CHANGELOG.md already carry the right version from the
-      # merged PR, so --no-commit here: this run only needs to reach the
-      # same version number again (from the same commit history) in order to
-      # tag it, push the tag, and publish the release.
-      - name: Tag and publish the prerelease
-        if: github.event.pull_request.head.ref == 'release/next'
+          # A release is a prerelease iff the version carries a suffix - which
+          # is also what distinguishes a release/next run from a release/promote
+          # one, so the branch name never has to be consulted.
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      # Done before the tag is pushed: everything up to that point is a
+      # no-op that can simply be re-run, everything after it is not.
+      - name: Extract the release notes for that version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python - <<'PY'
+          import os, pathlib, re
+
+          version = os.environ["VERSION"]
+          changelog = pathlib.Path("CHANGELOG.md").read_text()
+
+          # Everything under this version's "## vX.Y.Z (date)" heading, up to the
+          # next version heading. The lookahead matters: a plain \b after the
+          # version would let "v1.0.0" also match the "## v1.0.0-rc.1" heading.
+          pattern = rf"^## v{re.escape(version)}(?=[ \n])[^\n]*\n(.*?)(?=^## v|\Z)"
+          match = re.search(pattern, changelog, re.MULTILINE | re.DOTALL)
+
+          if match and match.group(1).strip():
+              notes = match.group(1).strip()
+          else:
+              print(f"::warning::No CHANGELOG.md section found for {version}")
+              notes = f"See [CHANGELOG.md](CHANGELOG.md) for the changes in {version}."
+
+          pathlib.Path("release-notes.md").write_text(notes + "\n")
+          print(notes)
+          PY
+
+      - name: Tag the merge commit
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::$TAG already exists on the remote - nothing to publish."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+
+      - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release version --as-prerelease --prerelease-token rc --no-commit
+          TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          args=(--title "$TAG" --notes-file release-notes.md --verify-tag)
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          else
+            args+=(--latest)
+          fi
+          gh release create "$TAG" "${args[@]}"
 
-      - name: Tag and publish the final release
-        if: github.event.pull_request.head.ref == 'release/promote'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release version --no-commit
+  # A release created with GITHUB_TOKEN does not fire the `release: published`
+  # event, so the installer build has to be called directly rather than left to
+  # trigger itself.
+  installers:
+    needs: publish
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-installers.yml
+    with:
+      ref: ${{ needs.publish.outputs.tag }}
+      release_tag: ${{ needs.publish.outputs.tag }}

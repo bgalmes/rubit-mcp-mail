@@ -1,13 +1,15 @@
 name: Prepare release
 
-# main requires a pull request for every change (no direct pushes allowed),
-# so this can't just push a version-bump commit straight to main. Instead,
-# every push to main computes the next semantic version from the
-# Conventional Commits made since the last release and opens (or updates) a
-# small PR carrying just the pyproject.toml version bump and CHANGELOG.md
-# update, with auto-merge turned on. publish-release.yml tags the commit and
-# publishes the GitHub prerelease once that PR lands - see the "Releasing"
-# section of the README for the full flow.
+# main requires a pull request for every change, so this can't push a version
+# bump straight to it. Instead, every push to main computes the next semantic
+# version from the Conventional Commits made since the last release and opens
+# (or updates) a small PR carrying just the pyproject.toml version bump and the
+# CHANGELOG.md update.
+#
+# Nothing here merges that PR. That is deliberate, and load-bearing: a PR merged
+# by GITHUB_TOKEN fires no pull_request event, so publish-release.yml would
+# never run. A human merge is a real event, and it is what actually publishes
+# the prerelease - see the "Releasing" section of the README for the full flow.
 #
 # A push with nothing releasable (only chore:/docs:/etc. commits, or the
 # release PR's own merge) is a no-op: no branch, PR, or commit is created.
@@ -39,8 +41,8 @@ jobs:
         run: python -m pip install --upgrade pip "python-semantic-release>=10,<11"
 
       # Writes the bumped version + changelog into the working tree without
-      # committing/tagging/pushing/releasing - those happen once a human (or
-      # auto-merge) actually lands the PR this opens below.
+      # committing/tagging/pushing/releasing - those happen once a human lands
+      # the PR this opens below.
       - name: Compute the next prerelease version
         id: version
         run: |
@@ -72,14 +74,27 @@ jobs:
           git commit -m "chore(release): ${VERSION}"
           git push --force origin release/next
 
+          body="$(cat <<EOF
+          Automated prerelease prep - **merge this PR to publish the prerelease**.
+
+          Merging tags the merge commit as \`v${VERSION}\` and publishes it as a
+          GitHub prerelease with the changelog section below it, then builds and
+          attaches the Linux and Windows installers.
+
+          This PR is rewritten from scratch on every push to \`main\`, so it always
+          carries the version for everything merged so far. Nothing is published
+          until you merge it.
+
+          Note: CI does not run on this PR - GitHub does not trigger workflows for
+          events created by \`GITHUB_TOKEN\`. The diff only ever touches
+          \`pyproject.toml\` and \`CHANGELOG.md\`.
+          EOF
+          )"
+
           existing="$(gh pr list --head release/next --base main --state open --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "chore(release): ${VERSION}"
-            pr_number="$existing"
+            gh pr edit "$existing" --title "chore(release): ${VERSION}" --body "$body"
           else
-            pr_url="$(gh pr create --head release/next --base main \
-              --title "chore(release): ${VERSION}" \
-              --body "Automated prerelease prep. Merging this PR publishes GitHub prerelease \`v${VERSION}\`.")"
-            pr_number="${pr_url##*/}"
+            gh pr create --head release/next --base main \
+              --title "chore(release): ${VERSION}" --body "$body"
           fi
-          gh pr merge "$pr_number" --squash --auto
