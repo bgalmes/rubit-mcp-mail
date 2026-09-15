@@ -63,38 +63,22 @@ jobs:
 
       - name: Open or update the release PR
         if: steps.version.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B release/next
-          git add pyproject.toml CHANGELOG.md
-          git commit -m "chore(release): ${VERSION}"
-          git push --force origin release/next
+        uses: ./.github/actions/open-release-pr
+        with:
+          branch: release/next
+          version: ${{ steps.version.outputs.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            Automated prerelease prep - **merge this PR to publish the prerelease**.
 
-          body="$(cat <<EOF
-          Automated prerelease prep - **merge this PR to publish the prerelease**.
+            Merging tags the merge commit as `v${{ steps.version.outputs.version }}` and
+            publishes it as a GitHub prerelease with the changelog section below it,
+            then builds and attaches the Linux and Windows installers.
 
-          Merging tags the merge commit as \`v${VERSION}\` and publishes it as a
-          GitHub prerelease with the changelog section below it, then builds and
-          attaches the Linux and Windows installers.
+            This PR is rewritten from scratch on every push to `main`, so it always
+            carries the version for everything merged so far. Nothing is published
+            until you merge it.
 
-          This PR is rewritten from scratch on every push to \`main\`, so it always
-          carries the version for everything merged so far. Nothing is published
-          until you merge it.
-
-          Note: CI does not run on this PR - GitHub does not trigger workflows for
-          events created by \`GITHUB_TOKEN\`. The diff only ever touches
-          \`pyproject.toml\` and \`CHANGELOG.md\`.
-          EOF
-          )"
-
-          existing="$(gh pr list --head release/next --base main --state open --json number --jq '.[0].number // empty')"
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "chore(release): ${VERSION}" --body "$body"
-          else
-            gh pr create --head release/next --base main \
-              --title "chore(release): ${VERSION}" --body "$body"
-          fi
+            Note: CI does not run on this PR - GitHub does not trigger workflows for
+            events created by `GITHUB_TOKEN`. The diff only ever touches
+            `pyproject.toml` and `CHANGELOG.md`.

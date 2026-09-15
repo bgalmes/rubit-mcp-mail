@@ -3,8 +3,24 @@ name: Publish release
 # Fires when one of the bot-managed release PRs (opened by auto-release.yml or
 # promote-release.yml) is merged by a human. That merge is the point where main
 # actually carries the new version, and - because it was a human and not
-# GITHUB_TOKEN that merged - it is a real pull_request event that can trigger
-# this workflow.
+# GITHUB_TOKEN that merged - it raises a real push event that can trigger this
+# workflow.
+#
+# It listens for the push rather than for the PR closing so that the whole run,
+# including the reusable workflows it calls, carries github.ref =
+# refs/heads/main. A called workflow runs in its caller's event context, and
+# deploy-website.yml's deploy job sits behind the `github-pages` environment,
+# whose deployment branch policy is checked against that ref before the job
+# starts. Under `pull_request: closed` the ref is refs/pull/N/merge, which is
+# not a branch and so can never satisfy the policy - the website job failed with
+# "not allowed to deploy to github-pages due to environment protection rules".
+# `gh workflow run --ref main` would be the other way to get a clean ref, but
+# GITHUB_TOKEN cannot trigger workflow_dispatch and this repo has no PAT.
+#
+# The gate is therefore the commit subject rather than the PR's head branch.
+# Only the release bot's PRs carry a `chore(release):` subject - pyproject.toml
+# excludes exactly that prefix from the changelog - and main takes no commits
+# except through a PR.
 #
 # Branch protection only blocks direct pushes to the main *branch*, not tags, so
 # this job tags the merge commit and publishes the GitHub release: a prerelease
@@ -15,8 +31,7 @@ name: Publish release
 # was open, semantic-release would derive a newer version than the tree that is
 # actually being tagged.
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
 
 permissions:
@@ -24,10 +39,7 @@ permissions:
 
 jobs:
   publish:
-    if: |
-      github.event.pull_request.merged == true &&
-      (github.event.pull_request.head.ref == 'release/next' ||
-       github.event.pull_request.head.ref == 'release/promote')
+    if: startsWith(github.event.head_commit.message, 'chore(release):')
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -35,7 +47,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # The exact commit that landed on main, whatever merge method was used.
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       # tomllib needs 3.11+, and pins `python` to a known interpreter rather
@@ -132,6 +144,9 @@ jobs:
   # build above, and gated on `installers` so the Releases API already reports
   # the attached assets - running it earlier would publish a changelog whose
   # newest version shows no downloads.
+  #
+  # This inherits github.ref from the run, so it only clears the `github-pages`
+  # environment because this workflow triggers on push to main. See the header.
   website:
     needs: [publish, installers]
     permissions:
