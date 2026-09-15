@@ -126,3 +126,18 @@ jobs:
     with:
       ref: ${{ needs.publish.outputs.tag }}
       release_tag: ${{ needs.publish.outputs.tag }}
+
+  # Rebuilds the website so its download button and changelog pick up the new
+  # release. Called directly for the same GITHUB_TOKEN reason as the installer
+  # build above, and gated on `installers` so the Releases API already reports
+  # the attached assets - running it earlier would publish a changelog whose
+  # newest version shows no downloads.
+  website:
+    needs: [publish, installers]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy-website.yml
+    with:
+      ref: main

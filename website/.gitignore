@@ -1,0 +1,26 @@
+# Nuxt / node build output and caches. The root .gitignore deliberately anchors
+# its own build/ and dist/ rules to the repo root, so everything here is ours.
+node_modules/
+.nuxt/
+.output/
+.data/
+.nitro/
+.cache/
+
+# `dist` with no trailing slash on purpose: the nitro static preset drops a
+# `dist` SYMLINK pointing at .output/public, and git treats a symlink as a file,
+# so a `dist/` rule sails straight past it and the link gets committed.
+dist
+
+# Local env (the Web3Forms key lives here in dev, and in repo secrets in CI)
+.env
+.env.*
+!.env.example
+
+# Generated at build time by scripts/fetch-releases.mjs from the GitHub
+# Releases API. Never committed: it would go stale the moment a release is cut.
+app/data/releases.json
+
+# Editor / OS noise
+.DS_Store
+*.log

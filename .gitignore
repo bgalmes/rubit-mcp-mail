@@ -4,7 +4,12 @@ __pycache__/
 .pytest_cache/
 config.toml
 secrets.json
-# PyInstaller output from building the installers locally
-build/
-dist/
-*.spec
+# PyInstaller output from building the installers locally. Anchored to the repo
+# root: unanchored, `build/` and `dist/` also swallow a website/ build directory,
+# and `*.spec` swallows Playwright/Vitest spec files.
+/build/
+/dist/
+/*.spec
+# A locally built installer left beside the source. 50+ MB of binary that must
+# never reach history.
+/rubit-mcp-mail-setup-*

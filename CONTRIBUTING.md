@@ -37,6 +37,13 @@ trigger a release by themselves. Squash-merge PRs with a commit message that
 follows this format — that's the message the release tooling reads, not the
 individual commits on the branch.
 
+> [!IMPORTANT]
+> **Changes under `website/` must never use `feat:` or `fix:`.** The parser keys
+> on the commit *type*, not the scope, so `feat(site): add a downloads page`
+> bumps the **Python package** and cuts a real installer release. Use
+> `docs(site):`, `chore(site):` or `ci(site):` instead — and remember the squash
+> title is what gets parsed.
+
 ## Release process
 
 Releases are prepared automatically from `main`, but nothing ships until a

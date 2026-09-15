@@ -1,0 +1,74 @@
+{
+  "generatedAt": "2026-09-15T07:54:14.686Z",
+  "repo": "bgalmes/rubit-mcp-mail",
+  "releases": [
+    {
+      "tag": "v1.0.0-rc.3",
+      "version": "1.0.0-rc.3",
+      "name": "v1.0.0-rc.3",
+      "prerelease": true,
+      "publishedAt": "2026-09-15T07:09:02Z",
+      "url": "https://github.com/bgalmes/rubit-mcp-mail/releases/tag/v1.0.0-rc.3",
+      "body": "### Bug Fixes\n\n- Make the test suite pass on Windows\n  ([`b8fbac9`](https://github.com/bgalmes/rubit-mcp-mail/commit/b8fbac980ec170dd30a4136e306c3f04bd90f425))",
+      "assets": {
+        "linux": {
+          "name": "rubit-mcp-mail-setup-linux",
+          "url": "https://github.com/bgalmes/rubit-mcp-mail/releases/download/v1.0.0-rc.3/rubit-mcp-mail-setup-linux",
+          "size": 78246992,
+          "sizeLabel": "74.6 MB",
+          "downloadCount": 0,
+          "sha256": "f1b3f31cd91240d76e10669c36e6a1478b321f887588ba94a2527837795f8ab8"
+        },
+        "windows": {
+          "name": "rubit-mcp-mail-setup-windows.exe",
+          "url": "https://github.com/bgalmes/rubit-mcp-mail/releases/download/v1.0.0-rc.3/rubit-mcp-mail-setup-windows.exe",
+          "size": 63907346,
+          "sizeLabel": "60.9 MB",
+          "downloadCount": 0,
+          "sha256": "0c3c7d049a344efb1d203834661540ed80571eddf2e19e8540987e387ee9787e"
+        }
+      }
+    },
+    {
+      "tag": "v1.0.0-rc.2",
+      "version": "1.0.0-rc.2",
+      "name": "v1.0.0-rc.2",
+      "prerelease": true,
+      "publishedAt": "2026-09-15T06:44:46Z",
+      "url": "https://github.com/bgalmes/rubit-mcp-mail/releases/tag/v1.0.0-rc.2",
+      "body": "### Bug Fixes\n\n- Repair the automated release pipeline\n  ([`89bbf90`](https://github.com/bgalmes/rubit-mcp-mail/commit/89bbf90da28f6c48d621226e9773d446e01893da))\n\n### Documentation\n\n- Add AGENTS.md with commit message conventions\n  ([`9f92906`](https://github.com/bgalmes/rubit-mcp-mail/commit/9f929062e0ed8d384e66f326d998e69e73969117))\n\n### Features\n\n- Show the app version in the CLI and every GUI window\n  ([`32372eb`](https://github.com/bgalmes/rubit-mcp-mail/commit/32372eb2087325fc47c0f48d93da7f9b2033b8ab))",
+      "assets": {
+        "linux": {
+          "name": "rubit-mcp-mail-setup-linux",
+          "url": "https://github.com/bgalmes/rubit-mcp-mail/releases/download/v1.0.0-rc.2/rubit-mcp-mail-setup-linux",
+          "size": 78243992,
+          "sizeLabel": "74.6 MB",
+          "downloadCount": 0,
+          "sha256": "db917e9bbd084d7ef40554eeb5d461b330716212669c037a862895aff2ab7159"
+        }
+      }
+    },
+    {
+      "tag": "v1.0.0-rc.1",
+      "version": "1.0.0-rc.1",
+      "name": "v1.0.0-rc.1",
+      "prerelease": true,
+      "publishedAt": "2026-09-14T19:00:09Z",
+      "url": "https://github.com/bgalmes/rubit-mcp-mail/releases/tag/v1.0.0-rc.1",
+      "body": "## v1.0.0-rc.1 (2026-09-14)\n\n- Initial Release",
+      "assets": {}
+    }
+  ],
+  "platforms": [
+    "linux",
+    "windows"
+  ],
+  "latest": "v1.0.0-rc.3",
+  "latestStable": null,
+  "latestPrerelease": "v1.0.0-rc.3",
+  "recommended": "v1.0.0-rc.3",
+  "latestFor": {
+    "linux": "v1.0.0-rc.3",
+    "windows": "v1.0.0-rc.3"
+  }
+}
