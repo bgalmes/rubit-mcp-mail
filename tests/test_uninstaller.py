@@ -1,5 +1,5 @@
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -201,9 +201,9 @@ class TestWindowsCleanupScript:
         assert r"C:\Users\a\rubit-mcp-mail" in script
 
     def test_a_quote_cannot_break_out_of_the_literal(self):
-        script = uninstaller.windows_cleanup_script(Path("C:/o'brien/rubit-mcp-mail"))
+        script = uninstaller.windows_cleanup_script(PureWindowsPath("C:/o'brien/rubit-mcp-mail"))
 
-        assert "'C:/o''brien/rubit-mcp-mail'" in script
+        assert r"'C:\o''brien\rubit-mcp-mail'" in script
 
     def test_deletes_itself_last(self):
         script = uninstaller.windows_cleanup_script(Path(r"C:\bin"))

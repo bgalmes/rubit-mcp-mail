@@ -37,3 +37,28 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+  # The suite is only platform-sensitive in a handful of places (file modes,
+  # desktop entries, PowerShell quoting, fixture line endings), but the
+  # release build runs it on Windows before packaging the installer - so a
+  # Windows-only failure used to surface at release time rather than on the
+  # PR that caused it. Lint and pyright stay on Linux: they say the same thing
+  # on either platform.
+  windows:
+    name: Windows tests
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest -q

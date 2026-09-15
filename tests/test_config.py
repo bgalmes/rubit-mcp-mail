@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from rubit_mcp_mail.config import Config, load_config
@@ -220,8 +222,11 @@ class TestSecretStore:
         assert store.get("missing") is None
         store.set("token:x", "s3cret")
         assert store.get("token:x") == "s3cret"
-        assert oct(path.stat().st_mode)[-3:] == "600"
-        assert oct(path.parent.stat().st_mode)[-3:] == "700"
+        if sys.platform != "win32":
+            # POSIX modes only - chmod does not carry this meaning on Windows,
+            # where the equivalent would be an NTFS ACL the store does not set.
+            assert oct(path.stat().st_mode)[-3:] == "600"
+            assert oct(path.parent.stat().st_mode)[-3:] == "700"
         store.delete("token:x")
         assert store.get("token:x") is None
 

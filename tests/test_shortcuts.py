@@ -3,13 +3,28 @@
 The two halves that are easy to get wrong - .desktop syntax and PowerShell
 quoting - are pure functions here, so they are tested directly rather than by
 running a desktop environment.
+
+Those pure tests use PurePosixPath/PureWindowsPath rather than Path so that
+each one asserts the string that platform really produces, whichever platform
+the suite happens to be running on. The tests that write files are a different
+matter and are skipped off POSIX - see the classes below.
 """
 
-from pathlib import Path
+import sys
+from pathlib import Path, PurePosixPath, PureWindowsPath
+
+import pytest
 
 from rubit_mcp_mail import shortcuts
 
 GUI = Path("/home/someone/.local/share/rubit-mcp-mail/bin/rubit-mcp-mail-gui")
+
+#: These write .desktop files, chmod them and read the mode back. Windows has
+#: no equivalent - `create_shortcuts` dispatches to PowerShell there, which is
+#: covered by the script tests at the bottom of this file.
+linux_behaviour = pytest.mark.skipif(
+    sys.platform == "win32", reason="Linux desktop entries; Windows takes the PowerShell path"
+)
 
 
 class TestDesktopEntry:
@@ -21,12 +36,12 @@ class TestDesktopEntry:
         assert "Type=Application" in entry
 
     def test_exec_is_quoted_so_a_space_in_the_path_survives(self):
-        entry = shortcuts.desktop_entry(Path("/home/a b/bin/rubit-mcp-mail-gui"))
+        entry = shortcuts.desktop_entry(PurePosixPath("/home/a b/bin/rubit-mcp-mail-gui"))
 
         assert 'Exec="/home/a b/bin/rubit-mcp-mail-gui"' in entry
 
     def test_arguments_follow_the_quoted_path(self):
-        entry = shortcuts.desktop_entry(Path("/usr/bin/rubit-mcp-mail"), "gui")
+        entry = shortcuts.desktop_entry(PurePosixPath("/usr/bin/rubit-mcp-mail"), "gui")
 
         assert 'Exec="/usr/bin/rubit-mcp-mail" gui' in entry
 
@@ -37,6 +52,7 @@ class TestDesktopEntry:
         assert "Icon=mail-message-new" in shortcuts.desktop_entry(GUI, icon="mail-message-new")
 
 
+@linux_behaviour
 class TestCreateLinux:
     def test_writes_an_executable_entry_under_xdg_data_home(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
@@ -85,6 +101,7 @@ class TestCreateLinux:
         assert any("Could not create the application menu entry" in note for note in notes)
 
 
+@linux_behaviour
 class TestRemoveLinux:
     def test_removes_both_entries_and_the_icon(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
@@ -130,10 +147,10 @@ class TestWindowsScript:
         assert "CreateShortcut" in script
 
     def test_a_quote_in_the_path_cannot_break_out_of_the_literal(self):
-        script = shortcuts.windows_shortcut_script(Path("C:/o'brien/gui.exe"))
+        script = shortcuts.windows_shortcut_script(PureWindowsPath("C:/o'brien/gui.exe"))
 
         # Doubled, which is how a single-quoted PowerShell string escapes one.
-        assert "'C:/o''brien/gui.exe'" in script
+        assert r"'C:\o''brien\gui.exe'" in script
 
     def test_arguments_are_set_separately_from_the_target(self):
         script = shortcuts.windows_shortcut_script(Path("C:/bin/rubit-mcp-mail.exe"), "gui")

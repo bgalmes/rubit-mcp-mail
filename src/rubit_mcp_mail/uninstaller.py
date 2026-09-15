@@ -15,7 +15,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from . import claude_registration, shortcuts, uninstall_registry
 from .auth import build_auth
@@ -67,7 +67,7 @@ def _remove_config_and_secrets(config_file: Path, store: SecretStore) -> list[st
     return notes
 
 
-def windows_cleanup_script(install_dir: Path) -> str:
+def windows_cleanup_script(install_dir: PurePath) -> str:
     """PowerShell that deletes `install_dir` once nothing still has it open.
 
     The process running this code (the uninstaller itself) lives inside
