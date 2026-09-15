@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import __version__
 from .config import Config, config_path, load_config
 from .models import Folder
 from .secrets import SecretStore
@@ -46,6 +47,7 @@ class AccountReport:
 @dataclass
 class Report:
     config_path: Path
+    version: str = __version__
     #: True when there is no config file at all - the first-run case, which
     #: wants a "create one" path rather than an error.
     missing_config: bool = False

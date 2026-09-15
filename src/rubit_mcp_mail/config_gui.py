@@ -36,6 +36,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .auth import MicrosoftDeviceCodeAuth, PasswordAuth
 from .config import Account, config_path
 from .config_editor import (
@@ -162,6 +163,7 @@ def parse_provider_form(values: dict[str, str], scopes_text: str) -> dict[str, A
 def doctor_text(report: Report) -> str:
     """The doctor result as plain text, the same diagnosis the CLI prints."""
     lines = [
+        f"Version:   {report.version}",
         f"Config:    {report.config_path}",
         f"Downloads: {report.download_dir}",
         f"Secrets:   {report.secrets_backend}",
@@ -666,7 +668,7 @@ class ConfigWindow:
         self.root = root
         self.path = config_path()
 
-        root.title(WINDOW_TITLE)
+        root.title(f"{WINDOW_TITLE} — v{__version__}")
         root.minsize(760, 560)
         try:
             ttk.Style().theme_use("clam")

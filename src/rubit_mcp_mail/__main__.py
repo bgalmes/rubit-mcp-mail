@@ -11,6 +11,7 @@ import argparse
 import logging
 import sys
 
+from . import __version__
 from .diagnostics import AccountReport, Report, run_doctor
 from .session import Session
 
@@ -106,6 +107,7 @@ def _print_account(report: AccountReport) -> None:
 def cmd_doctor(args: argparse.Namespace) -> int:
     names = [args.account] if args.account else None
     report: Report = run_doctor(names)
+    print(f"version: {report.version}")
     print(f"config: {report.config_path}")
 
     if report.missing_config:
@@ -152,6 +154,7 @@ def main() -> int:
         prog="rubit-mcp-mail", description="Read-only MCP server for reading mail over IMAP."
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("serve", help="Run the MCP server on stdio (default).").set_defaults(

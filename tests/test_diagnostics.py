@@ -1,5 +1,6 @@
 import pytest
 
+from rubit_mcp_mail import __version__
 from rubit_mcp_mail.diagnostics import override_keys, run_doctor
 from rubit_mcp_mail.secrets import SecretStore
 
@@ -45,6 +46,7 @@ class TestRunDoctor:
 
     def test_carries_the_config_context(self, configured):
         report = run_doctor(connect=False)
+        assert report.version == __version__
         assert report.config_path == configured
         assert report.provider_overrides == {"outlook": ["host", "oauth.authority", "oauth.scopes"]}
         assert "keyring unavailable" in report.secrets_backend
