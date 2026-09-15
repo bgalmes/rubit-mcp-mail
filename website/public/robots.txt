@@ -1,0 +1,10 @@
+# NOTE: crawlers only read robots.txt from the origin root, and this site is
+# served from https://bgalmes.github.io/rubit-mcp-mail/ - a path this repo does
+# not own. So this file ships at /rubit-mcp-mail/robots.txt and is never read.
+# It is here to be correct the moment a custom domain is added, at which point
+# the Sitemap line below starts doing real work. Until then the sitemap has to
+# reach Google via Search Console or by being crawled through inbound links.
+User-agent: *
+Allow: /
+
+Sitemap: https://bgalmes.github.io/rubit-mcp-mail/sitemap.xml

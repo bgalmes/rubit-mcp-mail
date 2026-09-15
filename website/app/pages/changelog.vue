@@ -3,7 +3,7 @@ import { formatDate, tagToAnchor } from '~/utils/format'
 
 const { all, recommended, hasStable, releasesUrl, generatedAt } = useReleases()
 
-useSeoMeta({
+usePageSeo({
   title: 'Changelog',
   description:
     'Every release of rubit-mcp-mail, what changed in it, and the installers it shipped — '

@@ -1,4 +1,8 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+
+// '/rubit-mcp-mail/' in CI (the deploy workflow exports it), '/' locally.
+const baseURL = process.env.NUXT_APP_BASE_URL || '/'
+
 export default defineNuxtConfig({
   compatibilityDate: '2026-09-15',
   devtools: { enabled: true },
@@ -15,12 +19,23 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   app: {
-    // '/' locally; the deploy workflow exports NUXT_APP_BASE_URL=/rubit-mcp-mail/
-    // because GitHub Pages serves this repo from a sub-path.
-    baseURL: process.env.NUXT_APP_BASE_URL || '/',
+    // GitHub Pages serves this repo from a sub-path; see the note above.
+    baseURL,
     head: {
       htmlAttrs: { lang: 'en' },
+      // Baked into the SPA fallback shell that the github_pages preset writes to
+      // 404.html. That file is never server-rendered (data-ssr="false"), so
+      // error.vue's meta only lands after JS runs and the file would otherwise
+      // ship with no title or description at all. Every real page overrides both
+      // through usePageSeo(). Deliberately no `robots` here: app.head is global,
+      // so a noindex would apply to the whole site, and a 404 status already
+      // keeps the page out of an index.
+      title: 'rubit-mcp-mail',
       meta: [
+        {
+          name: 'description',
+          content: 'A read-only MCP server that lets Claude read your mail over IMAP.',
+        },
         { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
         { name: 'theme-color', content: '#0b0c0f' },
       ],
@@ -36,6 +51,11 @@ export default defineNuxtConfig({
     // URLs from this plus app.baseURL, so the sub-path belongs to baseURL alone.
     url: process.env.NUXT_PUBLIC_SITE_URL || 'https://bgalmes.github.io',
     name: 'rubit-mcp-mail',
+    // GitHub Pages 301s every extensionless URL to its slashed form, so the
+    // unslashed spelling is never where a crawler lands. Without this the
+    // sitemap advertises 20 URLs that all redirect, and disagrees with the
+    // canonical tags usePageSeo() emits.
+    trailingSlash: true,
     description:
       'A read-only MCP server that lets Claude read your mail over IMAP. Outlook, Gmail, '
       + 'Fastmail, iCloud or self-hosted - and it never marks a message as read.',
@@ -92,6 +112,11 @@ export default defineNuxtConfig({
   sitemap: {
     autoLastmod: true,
     // Keeps the contact form (and its public Web3Forms key) out of search results.
+    //
+    // The phantom /rubit-mcp-mail/rubit-mcp-mail/ entry is NOT filtered here and
+    // cannot be: this list is matched against the path after withoutBase(), which
+    // collapses that entry to '/' - indistinguishable from the homepage. It is
+    // dropped in server/plugins/sitemap-drop-base-route.ts instead.
     exclude: ['/contact'],
   },
 

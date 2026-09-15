@@ -17,7 +17,7 @@ const { data: surround } = await useAsyncData(`docs-surround-${route.path}`, () 
   }),
 )
 
-useSeoMeta({
+usePageSeo({
   title: page.value.title,
   description: page.value.description,
 })

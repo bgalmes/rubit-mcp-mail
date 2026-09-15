@@ -3,11 +3,37 @@ import { TOOLS } from '~/utils/tools'
 
 const { recommended, hasStable } = useReleases()
 
-useSeoMeta({
+const { canonical } = usePageSeo({
   title: 'Let Claude read your mail. Nothing else.',
   description:
     'A read-only MCP server for your mail. Provider-agnostic IMAP — Outlook, Gmail, '
     + 'Fastmail, iCloud or self-hosted — that never marks a message as read.',
+})
+
+// The site shipped with no structured data at all. SoftwareApplication is the
+// schema.org type search engines understand for a downloadable tool, and it is
+// what lets a result carry the licence and price rather than just a title.
+useHead({
+  script: [{
+    type: 'application/ld+json',
+    innerHTML: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      'name': 'rubit-mcp-mail',
+      'applicationCategory': 'DeveloperApplication',
+      'operatingSystem': 'Windows, Linux, macOS',
+      'url': canonical,
+      'description':
+        'A read-only MCP server for your mail. Provider-agnostic IMAP — Outlook, Gmail, '
+        + 'Fastmail, iCloud or self-hosted — that never marks a message as read.',
+      'codeRepository': 'https://github.com/bgalmes/rubit-mcp-mail',
+      'programmingLanguage': 'Python',
+      'license': 'https://github.com/bgalmes/rubit-mcp-mail/blob/main/LICENSE',
+      'downloadUrl': 'https://github.com/bgalmes/rubit-mcp-mail/releases',
+      // Free, but schema.org needs it said explicitly to render as such.
+      'offers': { '@type': 'Offer', 'price': '0', 'priceCurrency': 'USD' },
+    }),
+  }],
 })
 
 // simple-icons has no Fastmail glyph, so that one falls back to a lucide mark.
