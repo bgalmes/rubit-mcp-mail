@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePath
 
 #: Basename used for the .desktop file, the .lnk files and the icon.
 SHORTCUT_NAME = "rubit-mcp-mail"
@@ -52,11 +52,14 @@ def icon_source() -> Path | None:
 
 
 # -- Linux -------------------------------------------------------------------
-def desktop_entry(executable: Path, arguments: str = "", *, icon: str = SHORTCUT_NAME) -> str:
+def desktop_entry(executable: PurePath, arguments: str = "", *, icon: str = SHORTCUT_NAME) -> str:
     """The .desktop file contents for `executable`.
 
     `Exec` is quoted because the install directory sits under the user's home,
     which may well contain a space.
+
+    Takes a PurePath, not a Path: nothing here touches the filesystem, so the
+    Linux output stays checkable from a Windows machine and vice versa.
     """
     exec_line = f'"{executable}" {arguments}'.strip()
     return f"""[Desktop Entry]
@@ -71,7 +74,7 @@ Keywords=mail;imap;claude;mcp;
 """
 
 
-def uninstall_desktop_entry(executable: Path, *, icon: str = SHORTCUT_NAME) -> str:
+def uninstall_desktop_entry(executable: PurePath, *, icon: str = SHORTCUT_NAME) -> str:
     """The .desktop file contents for the "Uninstall" menu entry.
 
     Always passes `uninstall` regardless of what the settings shortcut was
@@ -176,7 +179,7 @@ def _ps_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def windows_shortcut_script(executable: Path, arguments: str = "") -> str:
+def windows_shortcut_script(executable: PurePath, arguments: str = "") -> str:
     """PowerShell that drops a .lnk in the Start Menu and on the Desktop.
 
     The two folders are resolved by PowerShell rather than here because a

@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -244,6 +245,10 @@ class TestApplySetup:
         assert registered == [SERVER]
         assert result.ok
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="asserts a .desktop entry; Windows takes the PowerShell shortcut path",
+    )
     def test_installs_the_gui_and_a_shortcut_to_it(
         self, tmp_path, store, strategy, no_clients, monkeypatch
     ):

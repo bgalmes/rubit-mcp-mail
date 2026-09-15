@@ -6,6 +6,8 @@ stripped environment. That failure is indistinguishable from an expired token
 unless the store says which backend it is using, so these tests pin that down.
 """
 
+import sys
+
 import pytest
 
 from rubit_mcp_mail.auth.oauth_microsoft import MicrosoftDeviceCodeAuth
@@ -27,6 +29,7 @@ def test_file_backend_round_trip(file_store):
     assert file_store.get("k") is None
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes; Windows ignores chmod")
 def test_file_backend_is_owner_only(file_store):
     file_store.set("k", "v")
     assert file_store._path.stat().st_mode & 0o777 == 0o600
