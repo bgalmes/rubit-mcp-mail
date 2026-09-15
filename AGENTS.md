@@ -50,5 +50,8 @@ PRs are squash-merged, so the **squash commit message** is what the release tool
 make sure it follows this format, not just the individual commits on the branch.
 
 Branching model is plain GitHub Flow: branch off `main`, PR back into `main`, delete the
-branch after merge. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full branching model and
-release process (prerelease-on-merge, manual promotion to stable).
+branch after merge. The `release/next` and `release/promote` branches belong to the release
+bot — never branch off them or commit to them by hand. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full branching model and release process (a bot
+prepares a release PR, a maintainer merges it to publish the prerelease, then promotes to
+stable manually).

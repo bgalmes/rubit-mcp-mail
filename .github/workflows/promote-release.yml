@@ -2,12 +2,19 @@ name: Promote to stable
 
 # Manual promotion, mirroring auto-release.yml: computes the final,
 # non-prerelease version for whatever is currently on main (main's branch
-# config in pyproject.toml defaults to `prerelease = false`, so this drops
-# the `-rc.N` suffix the same way promoting always has), and opens a PR with
-# auto-merge enabled rather than pushing directly, since main requires a
-# pull request for every change. publish-release.yml tags and publishes the
-# final release once that PR lands. A human decides when to run this;
-# nothing here fires on its own.
+# config in pyproject.toml defaults to `prerelease = false`, so this drops the
+# `-rc.N` suffix), and opens a PR rather than pushing directly, since main
+# requires a pull request for every change.
+#
+# Merging that PR is what publishes the final release, via publish-release.yml.
+# A human decides when to run this and when to merge; nothing here fires on its
+# own, and nothing auto-merges.
+#
+# There is deliberately no "force the bump level" input. semantic-release
+# already finalizes the current release candidate to its stable version - even
+# with no commits at all since the rc tag, 1.0.0-rc.2 promotes to 1.0.0 - and
+# every forced level produces something wrong instead (--patch would give
+# 1.0.1, --major 2.0.0).
 on:
   workflow_dispatch: {}
 
@@ -65,14 +72,23 @@ jobs:
           git commit -m "chore(release): ${VERSION}"
           git push --force origin release/promote
 
+          body="$(cat <<EOF
+          Automated promotion to stable - **merge this PR to publish the release**.
+
+          Merging tags the merge commit as \`v${VERSION}\` and publishes it as the
+          final, non-prerelease GitHub release, then builds and attaches the Linux
+          and Windows installers.
+
+          Note: CI does not run on this PR - GitHub does not trigger workflows for
+          events created by \`GITHUB_TOKEN\`. The diff only ever touches
+          \`pyproject.toml\` and \`CHANGELOG.md\`.
+          EOF
+          )"
+
           existing="$(gh pr list --head release/promote --base main --state open --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "chore(release): ${VERSION}"
-            pr_number="$existing"
+            gh pr edit "$existing" --title "chore(release): ${VERSION}" --body "$body"
           else
-            pr_url="$(gh pr create --head release/promote --base main \
-              --title "chore(release): ${VERSION}" \
-              --body "Automated promotion to stable. Merging this PR publishes the final release \`v${VERSION}\`.")"
-            pr_number="${pr_url##*/}"
+            gh pr create --head release/promote --base main \
+              --title "chore(release): ${VERSION}" --body "$body"
           fi
-          gh pr merge "$pr_number" --squash --auto

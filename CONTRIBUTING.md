@@ -6,7 +6,9 @@ This repo uses **GitHub Flow**: `main` is the only long-lived branch and is
 always releasable.
 
 - Branch off `main` for any change, work there, open a PR back into `main`.
-- No `develop`, `release/*`, or `hotfix/*` branches.
+- No `develop` or `hotfix/*` branches. The only `release/*` branches are
+  `release/next` and `release/promote`, which the release bot creates, force-
+  pushes and reuses — never branch off them or commit to them by hand.
 - Once a PR merges, delete the branch — nothing downstream depends on it
   staying around.
 
@@ -37,20 +39,26 @@ individual commits on the branch.
 
 ## Release process
 
-Releases are cut automatically from `main`, but nothing is "final" just
-because it merged:
+Releases are prepared automatically from `main`, but nothing ships until a
+maintainer merges the release PR, and nothing is "final" just because it
+merged:
 
 1. **Merging a PR into `main`** runs `python-semantic-release`, which reads
-   the commits since the last release, computes the next version, updates
-   the changelog, and publishes a **GitHub prerelease** (e.g. `1.3.0-rc.1`).
-   Installers are built and attached to it automatically, so every
-   prerelease is a real, testable build.
-2. **Try the prerelease.** Further merges to `main` before it's promoted
+   the commits since the last release, computes the next version, and opens
+   (or rewrites) a **release PR** from `release/next` carrying just the
+   version bump and the changelog entry.
+2. **Merging that release PR** tags the merge commit and publishes it as a
+   **GitHub prerelease** (e.g. `1.3.0-rc.1`), with installers built and
+   attached, so every prerelease is a real, testable build. Nothing
+   auto-merges it: a PR merged by the bot would fire no event and nothing
+   would get published. Merging it is the one manual step per release
+   candidate.
+3. **Try the prerelease.** Further merges to `main` before it's promoted
    bump the release candidate (`1.3.0-rc.2`, `1.3.0-rc.3`, ...).
-3. **Promoting to stable is manual.** A maintainer runs the "Promote to
-   stable" workflow (`workflow_dispatch`) against the prerelease that's
-   ready, which re-publishes it as the final version (`1.3.0`) with the
-   prerelease flag cleared.
+4. **Promoting to stable is manual.** A maintainer runs the "Promote to
+   stable" workflow (`workflow_dispatch`), which opens a `release/promote`
+   PR carrying the same version without the `-rc.N` suffix; merging it
+   publishes the final release (`1.3.0`) with the prerelease flag cleared.
 
 This keeps the single-`main` simplicity of GitHub Flow while still
 separating "shipped for testing" from "shipped as production" — see the
