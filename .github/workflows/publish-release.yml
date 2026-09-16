@@ -33,13 +33,42 @@ name: Publish release
 on:
   push:
     branches: [main]
+  # Publishes an EXISTING tag to PyPI (and, if it is a final release, to the MCP
+  # registry). Only the `pypi` and `mcp-registry` jobs run: the tag and the
+  # GitHub release already exist, `publish` refuses to re-tag, and there is no
+  # reason to rebuild installers or redeploy the site.
+  #
+  # Two uses. Backfilling a release that predates the `pypi` job - v1.0.0 shipped
+  # before it existed, so it was never uploaded - and retrying a release whose
+  # upload failed, which matters because none of the version-bumping commit types
+  # are ones this repo produces routinely: a run of `chore:`/`docs:`/`ci:` merges
+  # cuts no release at all, so there is otherwise no way to reach this job.
+  #
+  # The upload step deliberately stays in THIS file rather than moving to a
+  # reusable workflow: the PyPI trusted publisher is bound to the workflow
+  # filename `publish-release.yml`, so relocating it would break authentication.
+  # NB the ref is a ref, not necessarily a tag. v1.0.0 was tagged before the
+  # packaging metadata existed, so building that tree would upload a release with
+  # no licence, no keywords and - fatally - no `mcp-name:` marker, which the MCP
+  # registry needs to verify ownership. PyPI never lets a version be replaced, so
+  # that would burn 1.0.0 permanently. Backfill from `main` instead, and let the
+  # guard in the pypi job below enforce it.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref to build and publish from. Use main to backfill 1.0.0."
+        type: string
+        required: true
+        default: main
 
 permissions:
   contents: write
 
 jobs:
   publish:
-    if: startsWith(github.event.head_commit.message, 'chore(release):')
+    if: >-
+      github.event_name == 'push'
+      && startsWith(github.event.head_commit.message, 'chore(release):')
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
@@ -147,19 +176,73 @@ jobs:
   # `pip install` ignores prereleases unless asked for them with --pre.
   pypi:
     needs: publish
+    # `needs: publish` alone would skip this whenever `publish` skips - which is
+    # exactly the workflow_dispatch case. always() keeps the job reachable; the
+    # result check still stops a failed `publish` on a push from uploading a tag
+    # that was never created.
+    if: >-
+      always()
+      && (github.event_name == 'workflow_dispatch' || needs.publish.result == 'success')
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       contents: read
       id-token: write
+    outputs:
+      ref: ${{ steps.target.outputs.ref }}
+      prerelease: ${{ steps.target.outputs.prerelease }}
     steps:
+      - name: Choose the ref to build from
+        id: ref
+        env:
+          DISPATCH_REF: ${{ inputs.ref }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ref="$DISPATCH_REF"
+          else
+            ref="$RELEASE_TAG"
+          fi
+          if [ -z "$ref" ]; then
+            echo "::error::Nothing to publish - no ref resolved."
+            exit 1
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.publish.outputs.tag }}
+          ref: ${{ steps.ref.outputs.ref }}
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      # Read from the checked-out pyproject.toml rather than parsed out of a tag
+      # name, for the same reason the `publish` job does it: the tree being built
+      # is the authority on what version it is. It also means a dispatch against
+      # a branch works, where there is no tag to parse.
+      - name: Read the version being published
+        id: target
+        run: |
+          version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+          case "$version" in
+            *-*) prerelease=true ;;
+            *)   prerelease=false ;;
+          esac
+          echo "ref=${{ steps.ref.outputs.ref }}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Publishing $version from ${{ steps.ref.outputs.ref }} (prerelease=$prerelease)"
+
+      # A PyPI version can never be re-uploaded, so a package published without
+      # this marker could never afterwards be listed in the MCP registry under
+      # that version - the registry verifies ownership by finding it in the PyPI
+      # description. Refusing to build is far cheaper than burning the number.
+      - name: Assert the MCP registry marker is present
+        run: |
+          if ! grep -q "mcp-name: io.github.bgalmes/rubit-mcp-mail" README.md; then
+            echo "::error::README.md carries no mcp-name marker - this ref predates it."
+            exit 1
+          fi
 
       - name: Build the sdist and wheel
         run: |
@@ -182,14 +265,19 @@ jobs:
   # package and looking for the `mcp-name:` marker in its README - the upload
   # has to exist before the check can pass.
   mcp-registry:
-    needs: [publish, pypi]
-    if: needs.publish.outputs.prerelease == 'false'
+    # Reads the tag from `pypi` rather than `publish`, so a dispatched backfill
+    # lists the server too instead of stopping at the upload.
+    needs: pypi
+    if: >-
+      always()
+      && needs.pypi.result == 'success'
+      && needs.pypi.outputs.prerelease == 'false'
     permissions:
       contents: read
       id-token: write
     uses: ./.github/workflows/publish-mcp-registry.yml
     with:
-      ref: ${{ needs.publish.outputs.tag }}
+      ref: ${{ needs.pypi.outputs.ref }}
 
   # A release created with GITHUB_TOKEN does not fire the `release: published`
   # event, so the installer build has to be called directly rather than left to
