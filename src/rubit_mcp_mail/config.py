@@ -7,10 +7,10 @@ provider profile to use. Credentials come from SecretStore.
 from __future__ import annotations
 
 import os
+import tomllib
 from pathlib import Path
 
 import tomlkit
-import tomllib
 from pydantic import BaseModel, Field, PrivateAttr, ValidationError, model_validator
 
 from .permissions import TOOL_NAMES

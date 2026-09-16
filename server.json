@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.bgalmes/rubit-mcp-mail",
+  "title": "rubit-mcp-mail",
+  "description": "Read-only MCP server for your mail — provider-agnostic IMAP that never marks a message as read.",
+  "version": "1.0.0",
+  "websiteUrl": "https://bgalmes.github.io/rubit-mcp-mail/",
+  "repository": {
+    "url": "https://github.com/bgalmes/rubit-mcp-mail",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "rubit-mcp-mail",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "serve"
+        }
+      ]
+    }
+  ]
+}

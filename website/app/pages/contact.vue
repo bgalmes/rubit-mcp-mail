@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 
-useSeoMeta({
+usePageSeo({
   title: 'Contact',
   description: 'Questions, bug reports and security disclosures.',
   robots: 'noindex, follow',

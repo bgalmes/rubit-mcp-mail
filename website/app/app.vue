@@ -36,6 +36,7 @@ useSeoMeta({
   ogType: 'website',
   twitterCard: 'summary_large_image',
   description: site.description,
+  ogDescription: site.description,
   ogImage,
   twitterImage: ogImage,
 })

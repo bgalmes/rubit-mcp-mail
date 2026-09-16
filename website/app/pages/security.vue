@@ -1,5 +1,5 @@
 <script setup lang="ts">
-useSeoMeta({
+usePageSeo({
   title: 'Security',
   description:
     'Why rubit-mcp-mail cannot modify your mail: EXAMINE instead of SELECT, BODY.PEEK on '

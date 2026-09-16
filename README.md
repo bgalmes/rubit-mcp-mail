@@ -1,5 +1,13 @@
 # rubit-mcp-mail
 
+<!-- mcp-name: io.github.bgalmes/rubit-mcp-mail -->
+
+[![CI](https://github.com/bgalmes/rubit-mcp-mail/actions/workflows/ci.yml/badge.svg)](https://github.com/bgalmes/rubit-mcp-mail/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/bgalmes/rubit-mcp-mail)](https://github.com/bgalmes/rubit-mcp-mail/releases)
+[![PyPI](https://img.shields.io/pypi/v/rubit-mcp-mail)](https://pypi.org/project/rubit-mcp-mail/)
+[![Python](https://img.shields.io/pypi/pyversions/rubit-mcp-mail)](https://pypi.org/project/rubit-mcp-mail/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/bgalmes/rubit-mcp-mail/blob/main/LICENSE)
+
 A read-only MCP server for reading your mail. Provider-agnostic: it speaks IMAP,
 so it works with Outlook.com, Gmail, Fastmail, iCloud, or a self-hosted server —
 the provider is a line of config, not a code change.
@@ -54,6 +62,15 @@ Gmail calls it `[Gmail]/Spam`. Raw folder names work too.
 
 Full arguments and return shapes:
 [Tools reference](https://bgalmes.github.io/rubit-mcp-mail/docs/reference/tools).
+
+## Install with pip
+
+If you already have Python 3.11+ and would rather not run an installer:
+
+```bash
+pip install rubit-mcp-mail
+rubit-mcp-mail install      # the same setup wizard, from the terminal
+```
 
 ## Install from source
 
@@ -126,8 +143,8 @@ pytest -q
 
 Those are the same checks CI runs. Commit messages follow
 [Conventional Commits](https://www.conventionalcommits.org/) and drive automatic
-versioning — see [CONTRIBUTING.md](CONTRIBUTING.md) and
-[AGENTS.md](AGENTS.md). Building the installers and adding a provider are covered
+versioning — see [CONTRIBUTING.md](https://github.com/bgalmes/rubit-mcp-mail/blob/main/CONTRIBUTING.md)
+and [AGENTS.md](https://github.com/bgalmes/rubit-mcp-mail/blob/main/AGENTS.md). Building the installers and adding a provider are covered
 in [Contributing](https://bgalmes.github.io/rubit-mcp-mail/docs/about/contributing).
 
 ### The website
@@ -178,8 +195,8 @@ and `CHANGELOG.md` diff; a maintainer merges it by hand, which publishes the
 prerelease and builds the installers; `promote-release.yml` is dispatched
 manually to drop the `-rc.N` suffix. The human merge is load-bearing — GitHub
 raises no events for anything `GITHUB_TOKEN` does. Full flow:
-[CONTRIBUTING.md](CONTRIBUTING.md) and
-[How releases work](https://bgalmes.github.io/rubit-mcp-mail/docs/about/contributing#how-a-release-happens).
+[CONTRIBUTING.md](https://github.com/bgalmes/rubit-mcp-mail/blob/main/CONTRIBUTING.md)
+and [How releases work](https://bgalmes.github.io/rubit-mcp-mail/docs/about/contributing#how-a-release-happens).
 
 ## Notes and limits
 

@@ -14,7 +14,7 @@ import quopri
 import re
 from base64 import b64decode
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .models import Attachment, BodyFormat, EmailAddress
 
@@ -334,5 +334,5 @@ def address_list(addresses) -> list[EmailAddress]:
 def to_datetime(value) -> datetime | None:
     if isinstance(value, datetime):
         # IMAP dates are naive-but-UTC; make that explicit for JSON output.
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
     return None

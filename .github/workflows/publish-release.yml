@@ -43,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -126,6 +127,69 @@ jobs:
             args+=(--latest)
           fi
           gh release create "$TAG" "${args[@]}"
+
+  # Publishes the package to PyPI, which is both how Python users expect to
+  # install this (`pip install rubit-mcp-mail`) and the strongest name-match
+  # search result the project can have - a PyPI page is indexed far faster than
+  # a new GitHub Pages site.
+  #
+  # Trusted Publishing, so no API token is stored in this repo: PyPI verifies an
+  # OIDC claim that these files were built by this workflow, in this repository,
+  # in the `pypi` environment. That is what `id-token: write` is for.
+  #
+  # ONE-TIME SETUP, without which this job fails: create the project on PyPI and
+  # register a trusted publisher for owner `bgalmes`, repository
+  # `rubit-mcp-mail`, workflow `publish-release.yml`, environment `pypi`.
+  # Nothing else depends on this job except `mcp-registry`, so a failure here
+  # leaves the GitHub release, the installers and the website deploy intact.
+  #
+  # Prereleases are uploaded too: PEP 440 normalises 1.0.0-rc.1 to 1.0.0rc1, and
+  # `pip install` ignores prereleases unless asked for them with --pre.
+  pypi:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish.outputs.tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build the sdist and wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      # Runs before the upload because PyPI will not let a version be replaced:
+      # a broken long_description is permanent until the next release.
+      - name: Check the built metadata
+        run: |
+          python -m pip install --upgrade twine
+          twine check dist/*
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Only final releases are listed: the registry entry is what every client's
+  # discovery UI shows, and an -rc.N there would be what people install.
+  #
+  # Gated on `pypi` because the registry verifies ownership by fetching the PyPI
+  # package and looking for the `mcp-name:` marker in its README - the upload
+  # has to exist before the check can pass.
+  mcp-registry:
+    needs: [publish, pypi]
+    if: needs.publish.outputs.prerelease == 'false'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish-mcp-registry.yml
+    with:
+      ref: ${{ needs.publish.outputs.tag }}
 
   # A release created with GITHUB_TOKEN does not fire the `release: published`
   # event, so the installer build has to be called directly rather than left to

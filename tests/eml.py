@@ -10,7 +10,7 @@ is the same thing an IMAP server computes from the MIME headers, and each
 from __future__ import annotations
 
 import email
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.message import Message
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -109,7 +109,7 @@ def _addresses(msg: Message, header: str):
 
 def envelope(msg: Message) -> Envelope:
     date = msg.get("date")
-    parsed = parsedate_to_datetime(date) if date else datetime.now(timezone.utc)
+    parsed = parsedate_to_datetime(date) if date else datetime.now(UTC)
     return Envelope(
         date=parsed,
         subject=(msg.get("subject") or "").encode(),

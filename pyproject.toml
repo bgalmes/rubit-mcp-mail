@@ -1,12 +1,41 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]  # 77+ understands PEP 639 `license` / `license-files`
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "rubit-mcp-mail"
 version = "1.0.0"
 description = "Provider-agnostic, read-only MCP server for reading mail over IMAP"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+# These three blocks are what a PyPI visitor actually sees and what PyPI's own
+# search indexes. Deliberately no "License :: OSI Approved :: ..." classifier:
+# PEP 639 forbids pairing one with the SPDX `license` string above.
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "imap",
+    "email",
+    "claude",
+    "anthropic",
+    "read-only",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Email",
+    "Topic :: Communications :: Email :: Post-Office :: IMAP",
+]
 dependencies = [
     "mcp>=2.0,<3",
     "IMAPClient>=3.1",
@@ -24,6 +53,13 @@ dev = ["pytest>=8", "pyright>=1.1", "ruff>=0.6", "python-semantic-release>=10,<1
 # discovered through entry points that a frozen bundle does not have.
 build = ["pyinstaller>=6", "pyinstaller-hooks-contrib>=2024.7"]
 
+[project.urls]
+Homepage = "https://bgalmes.github.io/rubit-mcp-mail/"
+Documentation = "https://bgalmes.github.io/rubit-mcp-mail/docs"
+Repository = "https://github.com/bgalmes/rubit-mcp-mail"
+Issues = "https://github.com/bgalmes/rubit-mcp-mail/issues"
+Changelog = "https://bgalmes.github.io/rubit-mcp-mail/changelog"
+
 [project.scripts]
 rubit-mcp-mail = "rubit_mcp_mail.__main__:main"
 
@@ -37,7 +73,7 @@ testpaths = ["tests"]
 include = ["src", "tests"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]

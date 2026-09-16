@@ -1,5 +1,6 @@
-import pytest
 import tomllib
+
+import pytest
 
 from rubit_mcp_mail.config import load_config
 from rubit_mcp_mail.config_editor import (

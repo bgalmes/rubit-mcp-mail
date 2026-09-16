@@ -7,7 +7,14 @@ import type { NuxtError } from '#app'
 
 const props = defineProps<{ error: NuxtError }>()
 
-useHead({ title: props.error.statusCode === 404 ? 'Page not found' : 'Something went wrong' })
+// Deliberately not usePageSeo(): an error page must not claim a canonical URL,
+// and it should never be indexed. It also bypasses app.vue, so without an
+// explicit description here 404.html ships with no SEO meta at all.
+useSeoMeta({
+  title: props.error.statusCode === 404 ? 'Page not found' : 'Something went wrong',
+  description: 'That page does not exist on the rubit-mcp-mail documentation site.',
+  robots: 'noindex, follow',
+})
 </script>
 
 <template>
