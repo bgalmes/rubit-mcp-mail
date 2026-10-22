@@ -132,6 +132,20 @@ has both, and
 [Troubleshooting](https://bgalmes.github.io/rubit-mcp-mail/docs/guides/troubleshooting)
 has the logs.
 
+## Agent skill
+
+[`skills/rubit-mail/SKILL.md`](skills/rubit-mail/SKILL.md) tells an agent when
+to reach for the mail tools and how to chain them, and reminds it that the
+server is read-only and that mail content is untrusted. For Claude Code, copy it
+into your user (or a project's `.claude/`) skills directory:
+
+```bash
+mkdir -p ~/.claude/skills && cp -r skills/rubit-mail ~/.claude/skills/
+```
+
+Any other agent that reads `SKILL.md` files works the same way. See
+[Agent skill](https://bgalmes.github.io/rubit-mcp-mail/docs/install/agent-skill).
+
 ## Development
 
 ```sh
@@ -185,6 +199,7 @@ src/rubit_mcp_mail/
   auth/
     password.py         app passwords
     oauth_microsoft.py  MSAL device-code flow
+skills/rubit-mail/SKILL.md  agent skill: when and how to use the tools
 website/           the documentation site (Nuxt); see "The website" above
 ```
 
